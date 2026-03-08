@@ -144,6 +144,7 @@ class AnalysisOrchestrator:
         ligand_selection: Optional[str] = None,
         start_frame: Optional[int] = None,
         end_frame: Optional[int] = None,
+        discard_equilibration: bool = False,
         hbond_cutoff: float = 3.5,
         contact_cutoff: float = 8.0,
         salt_bridge_cutoff: float = 4.0,
@@ -210,6 +211,31 @@ class AnalysisOrchestrator:
                     "Sub-trajectory requested: frames %d–%d of %d",
                     actual_start, actual_end, n_frames,
                 )
+
+            # ── Optionally discard equilibration ────────────────
+            if discard_equilibration and n_frames > 50:
+                try:
+                    from .analysis.rmsd import compute_rmsd
+                    rmsd_result = await asyncio.to_thread(
+                        compute_rmsd, universe=universe,
+                    )
+                    equil_frame = rmsd_result.get("equilibration_frame", 0)
+                    if equil_frame > 0 and equil_frame < n_frames * 0.5:
+                        logger.info(
+                            "Discarding first %d frames as equilibration "
+                            "(discard_equilibration=True)",
+                            equil_frame,
+                        )
+                        # Create a sliced trajectory view to skip equilibration
+                        universe.trajectory[equil_frame:]
+                        result.trajectory_info["equilibration_discarded"] = equil_frame
+                        result.trajectory_info["analyzed_frames"] = (
+                            f"{equil_frame}-{n_frames}"
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "Equilibration auto-detection failed: %s", exc
+                    )
 
             # ── Build and run modules ──────────────────────────
             modules = self._build_module_list(

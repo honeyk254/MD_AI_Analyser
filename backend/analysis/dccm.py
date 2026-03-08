@@ -54,7 +54,7 @@ def compute_dccm(
         * ``resids`` -- residue IDs.
         * ``n_residues`` -- number of C-alpha atoms.
         * ``highly_correlated_pairs`` -- top 50 pairs with C > *threshold*.
-        * ``anticorrelated_pairs`` -- top 50 pairs with C < -*threshold* * 0.7.
+        * ``anticorrelated_pairs`` -- top 50 pairs with C < -*threshold*.
     """
     try:
         ca: mda.AtomGroup = select_ca_atoms(universe)
@@ -84,8 +84,8 @@ def compute_dccm(
         ]
         corr_pairs.sort(key=lambda x: -x["correlation"])
 
-        # Anti-correlated pairs
-        neg_threshold = -threshold * 0.7
+        # Anti-correlated pairs (symmetric threshold)
+        neg_threshold = -threshold
         neg_mask = corr_values < neg_threshold
         anticorr_pairs = [
             {

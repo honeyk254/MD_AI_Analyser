@@ -19,7 +19,7 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
 - Free Energy Landscape (Boltzmann inversion)
 - Solvent Accessible Surface Area (SASA)
 - Time-lagged Independent Component Analysis (tICA)
-- Normal Mode Analysis (ANM-based, vectorised Hessian)
+- Normal Mode Analysis (ANM-based, uniform spring constant, vectorised Hessian)
 - Perturbation Response Scanning (effector/sensor identification)
 - Energy Decomposition (per-residue LJ + Coulomb)
 - Configurational Entropy (Schlitter's method with explicit kBT)
@@ -29,7 +29,7 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
 
 ### Machine Learning (10 modules)
 - Conformational State Discovery (HDBSCAN / GMM / KMeans)
-- Markov State Models (validated transition matrix, MFPT, timescales)
+- Markov State Models (validated transition matrix, MFPT, timescales, Chapman-Kolmogorov test, implied timescale convergence)
 - Allosteric Pathway Detection (graph centrality, community detection)
 - Dynamic Domain Detection (spectral clustering on DCCM)
 - Ligand Interaction Analysis
@@ -47,7 +47,7 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
 - **Transformer** (self-supervised masked reconstruction)
   - Structural transition detection
   - Temporal importance scoring
-  - Per-residue dynamic attribution via gradient analysis
+  - Per-residue dynamic attribution via Integrated Gradients
 - **Variational Autoencoder** (configurable latent dimension)
   - Conformational landscape mapping
   - Reconstruction quality assessment
@@ -175,6 +175,7 @@ Navigate to: **http://localhost:8000**
 | DCCM Threshold | 0.5 | Correlation threshold for network edges |
 | VAE Latent Dim | 2 | Variational autoencoder latent dimensions |
 | Ligand Selection | -- | MDAnalysis selection string for ligand |
+| Discard Equilibration | Off | Auto-detect and discard pre-equilibrium frames via RMSD |
 
 ---
 
@@ -258,8 +259,8 @@ The `utils` package eliminates code duplication across 40+ analysis and ML modul
 
 **`trajectory_utils.py`** -- Central trajectory data access:
 - `select_ca_atoms()` -- C-alpha atom selection with validation
-- `collect_ca_positions()` -- Materialise full trajectory positions `(n_frames, n_res, 3)`
-- `collect_ca_coords_flat()` -- Flattened coordinates `(n_frames, n_res*3)` for ML input
+- `collect_ca_positions()` -- Materialise full trajectory positions `(n_frames, n_res, 3)` with optional Kabsch superposition
+- `collect_ca_coords_flat()` -- Flattened coordinates `(n_frames, n_res*3)` for ML input (with optional alignment)
 - `compute_dccm_from_positions()` -- Vectorised DCCM via `einsum`, computed once and shared
 - `residue_contributions_from_eigenvector()` -- Per-residue contributions from PCA/tICA eigenvectors
 
@@ -297,6 +298,9 @@ The `utils` package eliminates code duplication across 40+ analysis and ML modul
 
 ## Key Design Decisions
 
+### Trajectory Alignment
+All fluctuation-based analyses (RMSF, DCCM, PCA, etc.) operate on Kabsch-aligned Calpha coordinates, removing rigid-body rotation and translation before computing per-residue displacements.
+
 ### Concurrency Safety
 The orchestrator uses a local `params` dict per `run_analysis()` call rather than shared instance state, preventing race conditions when multiple jobs run concurrently.
 
@@ -305,7 +309,7 @@ Trajectory coordinates are collected once via shared utility functions (`collect
 
 ### Vectorised Computation
 Performance-critical code uses numpy vectorisation:
-- **NMA Hessian**: Built via broadcasting instead of `O(N^2)` Python loops
+- **NMA Hessian**: Built via broadcasting with uniform spring constant (standard ANM)
 - **DCCM**: Computed via `np.einsum("fid,fjd->ij", delta, delta)`
 - **Interaction fingerprints**: `np.triu_indices` + boolean masking
 - **Salt bridges / H-bonds**: `np.argwhere` and `np.bincount`

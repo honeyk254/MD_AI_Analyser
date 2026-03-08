@@ -43,7 +43,9 @@ def compute_water_bridges(
     distance_cutoff : float, optional
         Maximum water--protein polar-atom distance in Angstrom (default 3.5).
     angle_cutoff : float, optional
-        Angle cutoff in degrees (reserved for future use; default 130).
+        Minimum Protein_polar--Water_O--Protein_polar angle in degrees
+        for a valid bridge geometry (default 130).  Bridges with a more
+        acute angle are rejected.
     occupancy_threshold : float, optional
         Minimum bridge occupancy to include in results (default 0.1).
     **kwargs : Any
@@ -101,13 +103,15 @@ def compute_water_bridges(
             }
 
         n_frames: int = len(universe.trajectory)
+        angle_cutoff_rad: float = np.deg2rad(angle_cutoff)
         logger.info(
             "Water-bridge analysis: %d polar atoms, %d water oxygens, "
-            "%d frames, cutoff=%.1f A",
+            "%d frames, cutoff=%.1f A, angle_cutoff=%.0f deg",
             len(protein_polar),
             len(water_oxygen),
             n_frames,
             distance_cutoff,
+            angle_cutoff,
         )
 
         # Pre-extract residue IDs for the polar atoms (vectorised lookup)
@@ -131,20 +135,38 @@ def compute_water_bridges(
             )
 
             # For each water oxygen, find protein atoms within cutoff
+            w_positions = water_oxygen.positions
+            pp_positions = protein_polar.positions
             for w_idx in range(len(water_oxygen)):
                 close_protein = np.where(dist_mat[w_idx] < distance_cutoff)[0]
                 if len(close_protein) < 2:
                     continue
 
-                # Unique residue IDs bridged by this water
-                close_resid_set: set = set(polar_resids[close_protein].tolist())
-                resid_list = sorted(close_resid_set)
+                # Check angle criterion for each pair of close protein atoms.
+                # The angle is PolarAtom_A -- WaterO -- PolarAtom_B.
+                w_pos = w_positions[w_idx]
+                valid_pairs: Set[tuple] = set()
+                for a_i in range(len(close_protein)):
+                    for b_i in range(a_i + 1, len(close_protein)):
+                        idx_a = close_protein[a_i]
+                        idx_b = close_protein[b_i]
+                        rid_a = int(polar_resids[idx_a])
+                        rid_b = int(polar_resids[idx_b])
+                        if rid_a == rid_b or abs(rid_a - rid_b) <= 2:
+                            continue
+                        # Compute angle PolarA -- WaterO -- PolarB
+                        va = pp_positions[idx_a] - w_pos
+                        vb = pp_positions[idx_b] - w_pos
+                        cos_angle = (
+                            np.dot(va, vb)
+                            / (np.linalg.norm(va) * np.linalg.norm(vb) + 1e-10)
+                        )
+                        angle = np.arccos(np.clip(cos_angle, -1.0, 1.0))
+                        if angle >= angle_cutoff_rad:
+                            pair = (min(rid_a, rid_b), max(rid_a, rid_b))
+                            valid_pairs.add(pair)
 
-                # Record all unique non-sequential residue pairs
-                for a in range(len(resid_list)):
-                    for b in range(a + 1, len(resid_list)):
-                        if abs(resid_list[a] - resid_list[b]) > 2:
-                            frame_bridges.add((resid_list[a], resid_list[b]))
+                frame_bridges.update(valid_pairs)
 
             for pair in frame_bridges:
                 bridge_counts[pair] += 1

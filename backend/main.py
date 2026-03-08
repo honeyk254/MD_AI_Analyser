@@ -296,6 +296,7 @@ async def start_analysis(request: AnalysisRequest) -> dict[str, str]:
             grid_spacing=request.grid_spacing,
             correlation_threshold=request.correlation_threshold,
             vae_latent_dim=request.vae_latent_dim,
+            discard_equilibration=request.discard_equilibration,
         )
     )
     orchestrator.store_task(request.job_id, task)
@@ -337,7 +338,7 @@ async def stream_progress(job_id: str) -> StreamingResponse:
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@app.get("/api/results/{job_id}")
+@app.get("/api/results/{job_id}", response_model=None)
 async def get_results(job_id: str) -> JSONResponse | dict:
     """Retrieve completed analysis results."""
     _validate_job_id(job_id)

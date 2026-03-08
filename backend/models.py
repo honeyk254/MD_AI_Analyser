@@ -67,6 +67,7 @@ class AnalysisRequest(BaseModel):
     grid_spacing: float = 2.0
     correlation_threshold: float = 0.5
     vae_latent_dim: int = 2
+    discard_equilibration: bool = False
 
     # ── Validators ──────────────────────────────────────────
 

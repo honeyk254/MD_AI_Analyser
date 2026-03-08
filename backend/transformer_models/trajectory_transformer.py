@@ -288,14 +288,21 @@ def run_transformer_analysis(
             hidden_diffs > diff_threshold
         )[0].tolist()
 
-        # Per-residue temporal importance via gradient attribution
-        X_grad = X.clone().detach().requires_grad_(True)
-        _, frame_imp_grad, _ = model(X_grad)
-        total_imp = frame_imp_grad.sum()
-        total_imp.backward()
-        residue_temporal: np.ndarray = (
-            X_grad.grad.squeeze(0).abs().mean(dim=0).cpu().numpy()
-        )
+        # Per-residue temporal importance via Integrated Gradients
+        # (Sundararajan et al. 2017) — averages gradients along the
+        # interpolation path from a zero baseline to the actual input,
+        # providing more stable attribution than a single gradient.
+        n_ig_steps = 20
+        baseline = torch.zeros_like(X)
+        ig_grads = torch.zeros_like(X)
+        for step in range(1, n_ig_steps + 1):
+            alpha = step / n_ig_steps
+            X_interp = (baseline + alpha * (X - baseline)).detach().requires_grad_(True)
+            _, frame_imp_ig, _ = model(X_interp)
+            frame_imp_ig.sum().backward()
+            ig_grads += X_interp.grad
+        ig_attr = ((X - baseline) * ig_grads / n_ig_steps).squeeze(0)
+        residue_temporal: np.ndarray = ig_attr.abs().mean(dim=0).cpu().detach().numpy()
         residue_temporal_norm: list[float] = (
             residue_temporal / (residue_temporal.max() + 1e-8)
         ).tolist()

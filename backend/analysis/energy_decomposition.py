@@ -132,6 +132,8 @@ def compute_energy_decomposition(
         vdw_per_residue = np.zeros(n_res, dtype=np.float64)
         elec_per_residue = np.zeros(n_res, dtype=np.float64)
         pair_energies = np.zeros((n_res, n_res), dtype=np.float64)
+        pair_vdw = np.zeros((n_res, n_res), dtype=np.float64)
+        pair_elec = np.zeros((n_res, n_res), dtype=np.float64)
         n_frames: int = 0
 
         for ts in universe.trajectory:
@@ -168,12 +170,16 @@ def compute_energy_decomposition(
             vdw_per_residue += lj.sum(axis=1)
             elec_per_residue += coulomb.sum(axis=1)
             pair_energies += lj + coulomb
+            pair_vdw += lj
+            pair_elec += coulomb
 
         # ── Average over frames ──────────────────────────────────
         if n_frames > 0:
             vdw_per_residue /= n_frames
             elec_per_residue /= n_frames
             pair_energies /= n_frames
+            pair_vdw /= n_frames
+            pair_elec /= n_frames
 
         total_per_residue: np.ndarray = vdw_per_residue + elec_per_residue
 
@@ -198,14 +204,8 @@ def compute_energy_decomposition(
                     "resname_i": resnames[i],
                     "resname_j": resnames[j],
                     "energy_kj": round(float(sig_vals[idx]), 2),
-                    "vdw_kj": round(
-                        float(vdw_per_residue[i] + vdw_per_residue[j]) / n_res,
-                        3,
-                    ),
-                    "elec_kj": round(
-                        float(elec_per_residue[i] + elec_per_residue[j]) / n_res,
-                        3,
-                    ),
+                    "vdw_kj": round(float(pair_vdw[i, j]), 3),
+                    "elec_kj": round(float(pair_elec[i, j]), 3),
                 }
             )
 

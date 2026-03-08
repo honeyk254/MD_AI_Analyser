@@ -10,9 +10,8 @@ from typing import Any, Dict, List
 
 import numpy as np
 import MDAnalysis as mda
-from MDAnalysis.analysis.rms import RMSF as MDA_RMSF
 
-from ..utils.trajectory_utils import select_ca_atoms
+from ..utils.trajectory_utils import select_ca_atoms, collect_ca_positions
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -48,8 +47,14 @@ def compute_rmsf(
     try:
         ca_atoms: mda.AtomGroup = select_ca_atoms(universe)
 
-        rmsf_calc = MDA_RMSF(ca_atoms).run()
-        rmsf_values: np.ndarray = rmsf_calc.results.rmsf
+        # Compute RMSF from Kabsch-aligned positions to remove
+        # rigid-body rotation/translation artifacts.
+        positions = collect_ca_positions(universe, atoms=ca_atoms, align=True)
+        mean_pos = positions.mean(axis=0)
+        delta = positions - mean_pos
+        rmsf_values: np.ndarray = np.sqrt(
+            np.mean(np.sum(delta ** 2, axis=2), axis=0)
+        )
 
         resids: list[int] = ca_atoms.resids.tolist()
         resnames: list[str] = ca_atoms.resnames.tolist()

@@ -188,9 +188,8 @@ def _build_anm_hessian_vectorised(
     # Contact mask (within cutoff, excluding self-pairs)
     mask: np.ndarray = (dist_sq < cutoff ** 2) & (dist_sq > 0)
 
-    # Spring constants: k_ij = -gamma / dist^2  (only where mask is True)
-    dist_sq_safe: np.ndarray = np.where(dist_sq > 0, dist_sq, 1.0)
-    k_values: np.ndarray = np.where(mask, -gamma / dist_sq_safe, 0.0)  # (n, n)
+    # Spring constants: uniform gamma within cutoff (standard ANM, Bahar et al. 1997)
+    k_values: np.ndarray = np.where(mask, -gamma, 0.0)  # (n, n)
 
     # 3x3 super-elements for all pairs:
     # H_ij[a,b] = k_values[i,j] * diff[i,j,a] * diff[i,j,b]

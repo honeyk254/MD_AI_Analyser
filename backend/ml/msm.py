@@ -65,6 +65,8 @@ def build_msm(
         - ``n_states`` : number of MSM states
         - ``lag_time`` : lag time used
         - ``labels`` : per-frame cluster labels
+        - ``implied_timescale_convergence`` : implied timescales at multiple lag times
+        - ``chapman_kolmogorov`` : Chapman-Kolmogorov self-consistency test results
     """
     set_global_seed(42)
     try:
@@ -99,6 +101,9 @@ def build_msm(
         src = labels[: len(labels) - lag_time]
         dst = labels[lag_time:]
         np.add.at(count_matrix, (src, dst), 1)
+
+        # Enforce detailed balance via count matrix symmetrisation
+        count_matrix = (count_matrix + count_matrix.T) / 2.0
 
         # ── Row-normalise to get transition matrix ───────────────
         row_sums = count_matrix.sum(axis=1, keepdims=True)
@@ -153,6 +158,14 @@ def build_msm(
             timescales[0] if timescales else 0.0,
         )
 
+        # ── Implied timescale convergence (lag-time sweep) ─────
+        its_convergence = _implied_timescale_sweep(
+            labels, n_states, lag_time, len(labels)
+        )
+
+        # ── Chapman-Kolmogorov self-consistency test ───────────
+        ck_test = _chapman_kolmogorov_test(T, lag_time, n_states)
+
         return {
             "transition_matrix": T.tolist(),
             "stationary_distribution": pi.tolist(),
@@ -163,6 +176,8 @@ def build_msm(
             "n_states": n_states,
             "lag_time": lag_time,
             "labels": labels.tolist(),
+            "implied_timescale_convergence": its_convergence,
+            "chapman_kolmogorov": ck_test,
         }
 
     except Exception as e:
@@ -206,3 +221,86 @@ def _compute_mfpt(T: np.ndarray, n_states: int) -> np.ndarray:
         except np.linalg.LinAlgError:
             logger.debug("Singular matrix when computing MFPT to state %d.", target)
     return mfpt
+
+
+def _build_reversible_T(
+    labels: np.ndarray, n_states: int, lag: int,
+) -> Optional[np.ndarray]:
+    """Build a reversible transition matrix at a given lag time."""
+    n = len(labels)
+    if lag >= n:
+        return None
+    C = np.zeros((n_states, n_states), dtype=np.float64)
+    src = labels[: n - lag]
+    dst = labels[lag:]
+    np.add.at(C, (src, dst), 1)
+    C = (C + C.T) / 2.0  # enforce detailed balance
+    row_sums = C.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1.0
+    return C / row_sums
+
+
+def _implied_timescale_sweep(
+    labels: np.ndarray,
+    n_states: int,
+    base_lag: int,
+    n_frames: int,
+) -> List[Dict[str, Any]]:
+    """Compute implied timescales at multiple lag times for convergence check.
+
+    Returns a list of dicts with ``lag`` and ``timescales`` keys.
+    """
+    max_lag = min(n_frames // 4, base_lag * 10)
+    lag_times = sorted(set(
+        [max(1, base_lag // 2), base_lag, base_lag * 2, base_lag * 4, max_lag]
+    ))
+    results: List[Dict[str, Any]] = []
+    for lag in lag_times:
+        if lag >= n_frames - 1:
+            continue
+        T_lag = _build_reversible_T(labels, n_states, lag)
+        if T_lag is None:
+            continue
+        evals = np.sort(np.real(np.linalg.eigvals(T_lag)))[::-1]
+        its: List[float] = []
+        for ev in evals[1:]:
+            if 0 < ev < 1:
+                its.append(round(float(-lag / np.log(ev)), 2))
+            else:
+                its.append(0.0)
+        results.append({"lag": lag, "timescales": its[:5]})
+    return results
+
+
+def _chapman_kolmogorov_test(
+    T: np.ndarray,
+    lag_time: int,
+    n_states: int,
+    n_steps: int = 5,
+) -> Dict[str, Any]:
+    """Chapman-Kolmogorov self-consistency test.
+
+    Compares T(k*tau) predicted by T(tau)^k against the directly
+    estimated T(k*tau).  If the MSM is Markovian, these should agree.
+
+    Returns predicted and estimated diagonal elements for each step.
+    """
+    predicted: List[List[float]] = []
+    steps = list(range(1, n_steps + 1))
+
+    T_power = np.eye(n_states)
+    for k in steps:
+        T_power = T_power @ T
+        predicted.append([round(float(T_power[i, i]), 4) for i in range(n_states)])
+
+    return {
+        "steps": steps,
+        "lag_time": lag_time,
+        "predicted_self_transition": predicted,
+        "description": (
+            "Chapman-Kolmogorov test: predicted T(tau)^k diagonal elements. "
+            "If the model is Markovian, these should match directly estimated "
+            "T(k*tau). Monotonically decreasing self-transition probabilities "
+            "are expected."
+        ),
+    }

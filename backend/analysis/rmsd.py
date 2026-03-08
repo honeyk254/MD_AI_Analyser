@@ -81,7 +81,9 @@ def compute_rmsd(
             threshold = np.mean(diffs) * 0.5
             equil_candidates = np.where(diffs < threshold)[0]
             if len(equil_candidates) > 0:
-                equil_frame = int(equil_candidates[0])
+                # Offset by half-window to map convolved index back to
+                # the original frame numbering.
+                equil_frame = int(equil_candidates[0]) + window // 2
 
         logger.info(
             "RMSD computed: %d frames, mean=%.3f A, equilibration~frame %d",

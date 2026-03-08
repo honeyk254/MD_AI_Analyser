@@ -2,7 +2,7 @@
 
 Identifies charged residue pairs forming salt bridges across the
 trajectory using distance-based criteria between canonical charge
-centres (Arg CZ, Lys NZ, His NE2, Asp CG, Glu CD).
+centres (Arg CZ, Lys NZ, protonated His NE2, Asp OD1/OD2, Glu OE1/OE2).
 """
 from __future__ import annotations
 
@@ -47,15 +47,19 @@ def compute_salt_bridges(
             Total number of unique charged-residue pairs observed.
     """
     try:
-        # Positively charged: Arg (CZ), Lys (NZ), His (NE2)
+        # Positively charged: Arg (CZ), Lys (NZ), protonated His (NE2)
+        # Note: HIS is only included as positively charged when protonated
+        # (HIP/HSP).  Standard HIS/HID/HIE are neutral.
         pos_sel = universe.select_atoms(
             "(resname ARG and name CZ) or "
             "(resname LYS and name NZ) or "
-            "(resname HIS and name NE2)"
+            "(resname HIP HSP and name NE2)"
         )
-        # Negatively charged: Asp (CG), Glu (CD)
+        # Negatively charged: Asp carboxylate oxygens (OD1/OD2),
+        # Glu carboxylate oxygens (OE1/OE2)
         neg_sel = universe.select_atoms(
-            "(resname ASP and name CG) or (resname GLU and name CD)"
+            "(resname ASP and (name OD1 or name OD2)) or "
+            "(resname GLU and (name OE1 or name OE2))"
         )
 
         if len(pos_sel) == 0 or len(neg_sel) == 0:

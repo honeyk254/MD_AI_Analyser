@@ -10,8 +10,11 @@ select_ca_atoms
     Robust Cα atom selection with fallback.
 collect_ca_positions
     Collect Cα positions across all frames as a single ndarray.
+    Performs least-squares alignment to the first frame by default to
+    remove rigid-body rotation/translation (Kabsch, 1976).
 collect_ca_coords_flat
     Collect flattened Cα coordinate vectors (n_frames, n_atoms * 3).
+    Performs alignment by default.
 collect_frames_metadata
     Collect timestamps and frame count.
 compute_mean_positions
@@ -26,8 +29,55 @@ from typing import Optional, Tuple
 
 import numpy as np
 import MDAnalysis as mda
+from MDAnalysis.analysis import align as mda_align
 
 logger = logging.getLogger("md_ai_analyzer")
+
+
+def _align_positions_kabsch(
+    positions: np.ndarray,
+    ref_index: int = 0,
+) -> np.ndarray:
+    """Align trajectory positions to a reference frame using Kabsch superposition.
+
+    Removes rigid-body translation and rotation so that downstream analyses
+    (RMSF, PCA, DCCM, tICA, entropy, etc.) capture only internal motions.
+
+    Parameters
+    ----------
+    positions : np.ndarray
+        Shape ``(n_frames, n_atoms, 3)``.
+    ref_index : int
+        Frame index to use as the alignment reference (default 0).
+
+    Returns
+    -------
+    np.ndarray
+        Aligned positions with the same shape.
+    """
+    ref = positions[ref_index].copy()
+    ref_center = ref.mean(axis=0)
+    ref_centered = ref - ref_center
+
+    aligned = np.empty_like(positions)
+    for i in range(len(positions)):
+        mobile = positions[i]
+        mobile_center = mobile.mean(axis=0)
+        mobile_centered = mobile - mobile_center
+
+        # Kabsch algorithm: find optimal rotation via SVD
+        H = mobile_centered.T @ ref_centered
+        U, _S, Vt = np.linalg.svd(H)
+
+        # Correct for reflection
+        d = np.linalg.det(Vt.T @ U.T)
+        sign_matrix = np.eye(3)
+        sign_matrix[2, 2] = np.sign(d)
+
+        R = Vt.T @ sign_matrix @ U.T
+        aligned[i] = (mobile_centered @ R.T) + ref_center
+
+    return aligned
 
 
 def select_ca_atoms(
@@ -73,14 +123,23 @@ def select_ca_atoms(
 def collect_ca_positions(
     universe: mda.Universe,
     atoms: Optional[mda.AtomGroup] = None,
+    align: bool = True,
 ) -> np.ndarray:
     """Collect per-frame (n_atoms, 3) positions into a single array.
+
+    By default, performs least-squares alignment to the first frame
+    (Kabsch superposition) to remove rigid-body rotation and translation.
+    This is essential for analyses like RMSF, PCA, DCCM, tICA, and
+    entropy that assume internal-motion-only coordinates.
 
     Parameters
     ----------
     universe : mda.Universe
     atoms : mda.AtomGroup, optional
         If *None*, ``select_ca_atoms(universe)`` is used.
+    align : bool
+        If True (default), align all frames to the first frame via
+        Kabsch superposition.
 
     Returns
     -------
@@ -94,19 +153,28 @@ def collect_ca_positions(
     )
     for i, _ts in enumerate(universe.trajectory):
         positions[i] = atoms.positions
+    if align:
+        positions = _align_positions_kabsch(positions, ref_index=0)
     return positions
 
 
 def collect_ca_coords_flat(
     universe: mda.Universe,
     atoms: Optional[mda.AtomGroup] = None,
+    align: bool = True,
 ) -> np.ndarray:
     """Collect flattened Cα coordinate vectors.
+
+    By default, performs least-squares alignment to the first frame
+    before flattening.
 
     Parameters
     ----------
     universe : mda.Universe
     atoms : mda.AtomGroup, optional
+    align : bool
+        If True (default), align all frames to the first frame via
+        Kabsch superposition.
 
     Returns
     -------
@@ -117,9 +185,12 @@ def collect_ca_coords_flat(
         atoms = select_ca_atoms(universe)
     n_atoms = len(atoms)
     n_frames = len(universe.trajectory)
-    coords = np.empty((n_frames, n_atoms * 3), dtype=np.float64)
+    positions_3d = np.empty((n_frames, n_atoms, 3), dtype=np.float64)
     for i, _ts in enumerate(universe.trajectory):
-        coords[i] = atoms.positions.ravel()
+        positions_3d[i] = atoms.positions
+    if align:
+        positions_3d = _align_positions_kabsch(positions_3d, ref_index=0)
+    coords = positions_3d.reshape(n_frames, n_atoms * 3)
     return coords
 
 

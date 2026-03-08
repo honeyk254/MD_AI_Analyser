@@ -113,8 +113,10 @@ def compute_binding_kinetics(
             prot_com = protein.center_of_mass()
             com_distances[frame_idx] = float(np.linalg.norm(lig_com - prot_com))
 
-            # Vectorised per-residue minimum distance to ligand
-            dists = distance_array(ca.positions, ligand.positions)
+            # Vectorised per-residue minimum distance to ligand (PBC-aware)
+            dists = distance_array(
+                ca.positions, ligand.positions, box=ts.dimensions
+            )
             min_dists = dists.min(axis=1)  # shape (n_res,)
             per_res_contact[frame_idx] = min_dists < contact_cutoff
 

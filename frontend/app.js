@@ -226,6 +226,7 @@ async function uploadAndAnalyze() {
                 run_gnn: document.getElementById('opt-gnn').checked,
                 run_transformer: document.getElementById('opt-transformer').checked,
                 run_msm: document.getElementById('opt-msm').checked,
+                discard_equilibration: document.getElementById('opt-discard-equil').checked,
                 ligand_selection: document.getElementById('opt-ligand').value || null,
                 start_frame: startFrameVal ? parseInt(startFrameVal) : null,
                 end_frame: endFrameVal ? parseInt(endFrameVal) : null,

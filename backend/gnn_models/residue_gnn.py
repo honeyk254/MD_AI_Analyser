@@ -143,16 +143,13 @@ def run_gnn_analysis(universe: Any, **kwargs: Any) -> dict[str, Any]:
         resids: list[int] = ca.resids.tolist()
 
         # ── Compute node features ────────────────────────────────
-        # Feature 1: Per-residue RMSF
-        from MDAnalysis.analysis.rms import RMSF as MDA_RMSF
-
-        rmsf_calc = MDA_RMSF(ca).run()
-        rmsf_values: np.ndarray = rmsf_calc.results.rmsf
-
-        # Feature 2: Average contact count per residue
-        contact_counts = np.zeros(n_res)
+        # Note: RMSF is used as the prediction TARGET (not an input feature)
+        # to avoid circular self-prediction.
         positions_all = collect_ca_positions(universe, atoms=ca)
         n_frames = positions_all.shape[0]
+
+        # Feature 1: Average contact count per residue
+        contact_counts = np.zeros(n_res)
 
         for frame_idx in range(n_frames):
             dists = distance_array(positions_all[frame_idx], positions_all[frame_idx])
@@ -161,15 +158,22 @@ def run_gnn_analysis(universe: Any, **kwargs: Any) -> dict[str, Any]:
 
         contact_counts /= n_frames
 
-        # Feature 3: Position fluctuation magnitude (from shared util)
+        # Feature 2: Position fluctuation magnitude (from shared util)
         fluctuations: np.ndarray = compute_fluctuations(positions_all)
 
+        # Feature 3: Sequence position (normalised)
+        seq_position = np.arange(n_res, dtype=np.float32) / max(n_res - 1, 1)
+
         # Build node feature matrix [n_res, n_features]
+        # Deliberately excludes RMSF to avoid circular prediction
         node_features = np.column_stack([
-            rmsf_values / (rmsf_values.max() + 1e-8),
             contact_counts / (contact_counts.max() + 1e-8),
             fluctuations / (fluctuations.max() + 1e-8),
+            seq_position,
         ]).astype(np.float32)
+
+        # RMSF is the prediction target (computed from aligned positions)
+        rmsf_values: np.ndarray = compute_fluctuations(positions_all)
 
         # ── Build average contact graph (vectorised) ─────────────
         logger.info("Building average contact graph (%d frames, %d residues)", n_frames, n_res)

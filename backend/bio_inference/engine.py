@@ -1097,7 +1097,10 @@ class BiologicalInferenceEngine:
                           f"(score={score:.2f}/1.0). "
                           f"Assessment considers pocket volume ({mean_vol:.0f} A^3), "
                           f"hydrophobic character, interaction energy, and volume stability. "
-                          f"{'This pocket is a strong candidate for structure-based drug design.' if score > 0.6 else 'Consider experimental validation (e.g., fragment screening) to confirm binding potential.'}",
+                          f"{'This pocket is a strong candidate for structure-based drug design.' if score > 0.6 else 'Consider experimental validation (e.g., fragment screening) to confirm binding potential.'} "
+                          f"CAVEAT: This is a heuristic proxy-based score, not a validated druggability "
+                          f"predictor. Use FPocket, SiteMap, or experimental fragment screens for "
+                          f"quantitative druggability assessment.",
             "confidence": round(min(0.85, 0.5 + score * 0.4), 2),
             "evidence": evidence,
             "category": "binding",
@@ -1203,8 +1206,11 @@ class BiologicalInferenceEngine:
                               f"sites accessible during MD simulation (top {len(top)} shown). "
                               f"Types: {type_desc}. These residues are surface-exposed, dynamically "
                               f"flexible, and in loop/coil regions — structural prerequisites for "
-                              f"enzymatic PTM. Phosphorylation at these sites could modulate protein "
-                              f"dynamics and allosteric signaling.",
+                              f"enzymatic PTM. "
+                              f"CAVEAT: This analysis assesses steric accessibility only. Actual PTM "
+                              f"requires kinase/transferase recognition motifs (sequence context) which "
+                              f"are not evaluated here. Use tools like NetPhos, GPS, or kinase-specific "
+                              f"predictors for sequence-based PTM prediction.",
                 "confidence": round(min(0.8, 0.5 + 0.05 * len(ptm_candidates)), 2),
                 "evidence": evidence,
                 "category": "structural",
@@ -1442,7 +1448,10 @@ class BiologicalInferenceEngine:
                               f"{', '.join(d['resname'] + str(d['resid']) for d in top[:5])}. "
                               f"Partial salt bridge occupancy suggests these residues operate near "
                               f"their pKa and may switch protonation states under physiological pH "
-                              f"changes, making them pH-dependent conformational switches.",
+                              f"changes, making them pH-dependent conformational switches. "
+                              f"CAVEAT: Fixed-charge MD force fields cannot model protonation changes. "
+                              f"Constant-pH MD (CpHMD) or QM/MM simulations are needed to confirm "
+                              f"protonation state dynamics.",
                 "confidence": round(min(0.75, 0.5 + 0.04 * len(unique)), 2),
                 "evidence": evidence,
                 "category": "structural",
@@ -1451,9 +1460,15 @@ class BiologicalInferenceEngine:
         return insights
 
     def _detect_electrostatic_funnels(self, result) -> List[Dict]:
-        """Detect charged residue clusters forming electrostatic funnels for substrate guidance."""
+        """Detect charged residue clusters forming electrostatic funnels for substrate guidance.
+
+        Uses 3D spatial proximity from the contact map rather than sequence
+        proximity, since electrostatic funnels are defined by spatial clustering
+        of charged residues on the protein surface.
+        """
         insights = []
         rmsf_data = result.rmsf
+        contact_data = result.contacts
 
         if not isinstance(rmsf_data, dict) or "resnames" not in rmsf_data:
             return insights
@@ -1481,20 +1496,60 @@ class BiologicalInferenceEngine:
                 elif rn in self._CHARGED_NEGATIVE:
                     negative_surface.append(int(rid))
 
-        def find_clusters(resid_list, gap=4):
+        # Build 3D proximity graph from contact map data
+        contact_pairs = set()
+        if isinstance(contact_data, dict) and "persistent_contacts" in contact_data:
+            for pc in contact_data["persistent_contacts"]:
+                r1 = pc.get("resid_1")
+                r2 = pc.get("resid_2")
+                if r1 is not None and r2 is not None:
+                    contact_pairs.add((r1, r2))
+                    contact_pairs.add((r2, r1))
+
+        def find_3d_clusters(resid_list):
+            """Cluster residues by 3D contact proximity."""
             if not resid_list:
                 return []
-            sorted_r = sorted(resid_list)
-            clusters = [[sorted_r[0]]]
-            for r in sorted_r[1:]:
-                if r - clusters[-1][-1] <= gap:
-                    clusters[-1].append(r)
-                else:
-                    clusters.append([r])
-            return [c for c in clusters if len(c) >= 3]
+            resid_set = set(resid_list)
+            visited = set()
+            clusters = []
+            for rid in resid_list:
+                if rid in visited:
+                    continue
+                # BFS from this residue through 3D contacts
+                cluster = []
+                queue = [rid]
+                while queue:
+                    current = queue.pop(0)
+                    if current in visited:
+                        continue
+                    visited.add(current)
+                    cluster.append(current)
+                    for (r1, r2) in contact_pairs:
+                        if r1 == current and r2 in resid_set and r2 not in visited:
+                            queue.append(r2)
+                if len(cluster) >= 3:
+                    clusters.append(sorted(cluster))
+            return clusters
 
-        pos_clusters = find_clusters(positive_surface)
-        neg_clusters = find_clusters(negative_surface)
+        if contact_pairs:
+            pos_clusters = find_3d_clusters(positive_surface)
+            neg_clusters = find_3d_clusters(negative_surface)
+        else:
+            # Fallback to sequence proximity if no contact data
+            def find_seq_clusters(resid_list, gap=4):
+                if not resid_list:
+                    return []
+                sorted_r = sorted(resid_list)
+                clusters = [[sorted_r[0]]]
+                for r in sorted_r[1:]:
+                    if r - clusters[-1][-1] <= gap:
+                        clusters[-1].append(r)
+                    else:
+                        clusters.append([r])
+                return [c for c in clusters if len(c) >= 3]
+            pos_clusters = find_seq_clusters(positive_surface)
+            neg_clusters = find_seq_clusters(negative_surface)
 
         funnels = []
         for cluster in pos_clusters:
@@ -1551,8 +1606,11 @@ class BiologicalInferenceEngine:
             base_prop = self._AGGREGATION_PROPENSITY.get(rn, 0.0)
             flexibility = float(rmsf[i])
 
-            # Surface-exposed hydrophobic = aggregation risk
-            if base_prop > 0.3 and flexibility > mean_rmsf * 0.8:
+            # Aggregation-prone hydrophobic stretches are typically moderately
+            # exposed (not buried, not disordered tails).  Very high RMSF
+            # indicates disordered regions unlikely to form ordered aggregates.
+            moderately_exposed = mean_rmsf * 0.5 < flexibility < mean_rmsf * 2.0
+            if base_prop > 0.3 and moderately_exposed:
                 exposure_factor = min(1.0, flexibility / (mean_rmsf * 2))
                 score = base_prop * (0.5 + 0.5 * exposure_factor)
                 agg_scores.append({
@@ -1676,10 +1734,13 @@ class BiologicalInferenceEngine:
                 "residues": [],
                 "description": f"Evidence for folding/unfolding intermediate states detected. "
                               f"The simulation samples partially structured conformations that "
-                              f"likely represent on-pathway or off-pathway folding intermediates. "
-                              f"These intermediates may serve as aggregation nucleation points or "
-                              f"as kinetic traps affecting the folding rate. "
-                              f"{'Multiple metastable states with low population confirm transient intermediates.' if len(evidence) > 2 else ''}",
+                              f"may represent on-pathway or off-pathway folding intermediates. "
+                              f"{'Multiple metastable states with low population confirm transient intermediates.' if len(evidence) > 2 else ''} "
+                              f"CAVEAT: Standard MD at the timescales used here rarely captures "
+                              f"complete folding/unfolding events. These observations may reflect "
+                              f"local unfolding fluctuations rather than true folding intermediates. "
+                              f"Enhanced sampling methods (replica exchange, metadynamics) are needed "
+                              f"to characterise the folding landscape.",
                 "confidence": round(min(0.75, 0.5 + 0.05 * len(evidence)), 2),
                 "evidence": evidence,
                 "category": "transition",
@@ -2235,8 +2296,10 @@ class BiologicalInferenceEngine:
                           f"Top candidates: {', '.join(map(str, resid_list[:5]))}. "
                           f"These residues score highly across multiple metrics: structural "
                           f"centrality (GNN), allosteric importance (network hubs), hydrogen bond "
-                          f"participation, burial depth, and contact density. Mutations at these "
-                          f"positions are predicted to significantly impact stability and/or function.",
+                          f"participation, burial depth, and contact density. "
+                          f"CAVEAT: This is a proxy-based ranking, not a quantitative ddG prediction. "
+                          f"For experimental validation, use deep mutational scanning; for computational "
+                          f"ddG estimates, use FoldX, Rosetta ddG, or free energy perturbation (FEP).",
             "confidence": round(min(0.85, 0.55 + 0.03 * len([r for r, s in top if len(s["sources"]) >= 2])), 2),
             "evidence": evidence,
             "category": "structural",
@@ -2358,7 +2421,11 @@ class BiologicalInferenceEngine:
                           f"where mutations are most likely to destabilize the protein (ddG > 0). "
                           f"Highest-risk positions: {', '.join(c['resname'] + str(c['resid']) for c in top[:5])}. "
                           f"These residues are deeply buried, form extensive contacts and hydrogen "
-                          f"bonds, and contribute significantly to the total interaction energy.{desc_extra}",
+                          f"bonds, and contribute significantly to the total interaction energy.{desc_extra} "
+                          f"CAVEAT: The 'ddG-proxy' score is a heuristic, not a thermodynamic free "
+                          f"energy. Use FoldX, Rosetta, or alchemical free energy perturbation for "
+                          f"quantitative stability predictions. Force field accuracy also limits "
+                          f"per-residue energy decomposition reliability.",
             "confidence": round(min(0.8, 0.5 + 0.05 * len([c for c in top if c["score"] > 0.5])), 2),
             "evidence": evidence,
             "category": "structural",

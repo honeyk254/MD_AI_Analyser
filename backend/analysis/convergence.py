@@ -252,7 +252,7 @@ def _block_average(
         usable = nb * block_size
         blocks = data[:usable].reshape(nb, block_size)
         block_means = blocks.mean(axis=1)
-        sem = float(np.std(block_means, ddof=0) / np.sqrt(nb))
+        sem = float(np.std(block_means, ddof=1) / np.sqrt(nb))
 
         results.append(
             {
