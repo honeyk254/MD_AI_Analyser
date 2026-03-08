@@ -1,0 +1,37 @@
+# Core scientific computing
+numpy
+scipy
+pandas
+
+# Molecular dynamics analysis
+MDAnalysis
+mdtraj
+
+# Machine learning
+scikit-learn
+umap-learn
+
+# Deep learning
+torch
+torch-geometric
+
+# Graph analysis
+networkx
+
+# Visualization
+plotly
+kaleido
+
+# Web framework
+fastapi
+uvicorn[standard]
+python-multipart
+jinja2
+aiofiles
+
+# Report generation
+weasyprint
+
+# Utilities
+tqdm
+joblib

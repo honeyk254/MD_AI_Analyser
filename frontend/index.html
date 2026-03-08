@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MD AI Analyzer — AI-Powered Molecular Dynamics Analysis</title>
+    <meta name="description"
+        content="Advanced AI-powered molecular dynamics trajectory analysis platform with GNN, transformers, and biological inference">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- ===== Header ===== -->
+        <header class="header">
+            <h1>🧬 MD AI Analyzer</h1>
+            <p class="subtitle">AI-Powered Molecular Dynamics Trajectory Analysis</p>
+            <div class="gpu-badge" id="gpu-badge" style="display:none;"></div>
+        </header>
+
+        <!-- ===== Navigation ===== -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-section="upload">📤 Upload</button>
+            <button class="nav-tab" data-section="progress">⏳ Progress</button>
+            <button class="nav-tab" data-section="results">📊 Results</button>
+            <button class="nav-tab" data-section="insights">🧠 Insights</button>
+            <button class="nav-tab" data-section="viewer">🔬 3D Viewer</button>
+            <button class="nav-tab" data-section="downloads">📥 Downloads</button>
+        </nav>
+
+        <!-- ===== Upload Section ===== -->
+        <section id="section-upload" class="section active">
+            <div class="card">
+                <h2>📤 Upload MD Simulation Files</h2>
+                <div class="upload-zone" id="upload-zone">
+                    <div class="icon">📂</div>
+                    <h3>Drag & drop your files here</h3>
+                    <p>or click to select files below</p>
+                </div>
+
+                <div class="file-inputs">
+                    <div class="file-input-group">
+                        <label>Trajectory <span class="required">*</span></label>
+                        <input type="file" id="file-trajectory" accept=".xtc,.trr">
+                        <div class="accepted">.xtc, .trr</div>
+                    </div>
+                    <div class="file-input-group">
+                        <label>Topology</label>
+                        <input type="file" id="file-topology" accept=".tpr">
+                        <div class="accepted">.tpr</div>
+                    </div>
+                    <div class="file-input-group">
+                        <label>Structure <span class="required">*</span></label>
+                        <input type="file" id="file-structure" accept=".pdb,.gro">
+                        <div class="accepted">.pdb, .gro</div>
+                    </div>
+                    <div class="file-input-group">
+                        <label>Reference (Optional)</label>
+                        <input type="file" id="file-reference" accept=".pdb,.gro">
+                        <div class="accepted">.pdb, .gro</div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    <h2>⚙️ Analysis Options</h2>
+                    <div class="options-panel">
+                        <div class="option-item">
+                            <input type="checkbox" id="opt-gnn" checked>
+                            <label for="opt-gnn">Graph Neural Network</label>
+                        </div>
+                        <div class="option-item">
+                            <input type="checkbox" id="opt-transformer" checked>
+                            <label for="opt-transformer">Transformer Analysis</label>
+                        </div>
+                        <div class="option-item">
+                            <input type="checkbox" id="opt-msm" checked>
+                            <label for="opt-msm">Markov State Model</label>
+                        </div>
+                        <div class="option-item" style="grid-column: span 2;">
+                            <label for="opt-ligand" style="min-width: 120px;">Ligand selection:</label>
+                            <input type="text" id="opt-ligand" placeholder="e.g., resname LIG">
+                        </div>
+                    </div>
+
+                    <details class="advanced-toggle">
+                        <summary>🔧 Advanced Parameters</summary>
+                        <div class="advanced-params">
+                            <div class="param-section">
+                                <div class="param-section-header">
+                                    <span class="param-icon">🎯</span>
+                                    <span>Frame Range</span>
+                                </div>
+                                <div class="param-grid cols-2">
+                                    <div class="param-card">
+                                        <div class="param-label">Start Frame</div>
+                                        <input type="number" id="opt-start-frame" placeholder="0" min="0">
+                                        <div class="param-hint">First frame to analyze</div>
+                                    </div>
+                                    <div class="param-card">
+                                        <div class="param-label">End Frame</div>
+                                        <input type="number" id="opt-end-frame" placeholder="All">
+                                        <div class="param-hint">Last frame (blank = all)</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="param-section">
+                                <div class="param-section-header">
+                                    <span class="param-icon">📏</span>
+                                    <span>Distance Cutoffs</span>
+                                </div>
+                                <div class="param-grid cols-3">
+                                    <div class="param-card">
+                                        <div class="param-label">H-Bond</div>
+                                        <div class="param-input-wrap">
+                                            <input type="number" id="opt-hbond-cutoff" value="3.5" step="0.1" min="2" max="5">
+                                            <span class="param-unit">Å</span>
+                                        </div>
+                                    </div>
+                                    <div class="param-card">
+                                        <div class="param-label">Contact</div>
+                                        <div class="param-input-wrap">
+                                            <input type="number" id="opt-contact-cutoff" value="8.0" step="0.5" min="4" max="15">
+                                            <span class="param-unit">Å</span>
+                                        </div>
+                                    </div>
+                                    <div class="param-card">
+                                        <div class="param-label">Salt Bridge</div>
+                                        <div class="param-input-wrap">
+                                            <input type="number" id="opt-salt-cutoff" value="4.0" step="0.1" min="2" max="6">
+                                            <span class="param-unit">Å</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="param-section">
+                                <div class="param-section-header">
+                                    <span class="param-icon">⚗️</span>
+                                    <span>Simulation Parameters</span>
+                                </div>
+                                <div class="param-grid cols-3">
+                                    <div class="param-card">
+                                        <div class="param-label">FEL Bins</div>
+                                        <div class="param-input-wrap">
+                                            <input type="number" id="opt-fel-bins" value="50" min="10" max="200">
+                                            <span class="param-unit">#</span>
+                                        </div>
+                                    </div>
+                                    <div class="param-card">
+                                        <div class="param-label">Temperature</div>
+                                        <div class="param-input-wrap">
+                                            <input type="number" id="opt-temperature" value="300" step="1" min="200" max="500">
+                                            <span class="param-unit">K</span>
+                                        </div>
+                                    </div>
+                                    <div class="param-card">
+                                        <div class="param-label">MSM Lag Time</div>
+                                        <div class="param-input-wrap">
+                                            <input type="number" id="opt-msm-lag" value="5" min="1" max="100">
+                                            <span class="param-unit">τ</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="param-section">
+                                <div class="param-section-header">
+                                    <span class="param-icon">🧠</span>
+                                    <span>ML / Deep Learning</span>
+                                </div>
+                                <div class="param-grid cols-3">
+                                    <div class="param-card">
+                                        <div class="param-label">Grid Spacing</div>
+                                        <div class="param-input-wrap">
+                                            <input type="number" id="opt-grid-spacing" value="2.0" step="0.5" min="0.5" max="5">
+                                            <span class="param-unit">Å</span>
+                                        </div>
+                                    </div>
+                                    <div class="param-card">
+                                        <div class="param-label">DCCM Threshold</div>
+                                        <div class="param-input-wrap">
+                                            <input type="number" id="opt-corr-threshold" value="0.5" step="0.05" min="0.1" max="1">
+                                            <span class="param-unit">|r|</span>
+                                        </div>
+                                    </div>
+                                    <div class="param-card">
+                                        <div class="param-label">VAE Latent Dim</div>
+                                        <div class="param-input-wrap">
+                                            <input type="number" id="opt-vae-dim" value="2" min="2" max="32">
+                                            <span class="param-unit">d</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="upload-actions">
+                    <button class="btn btn-primary" id="btn-upload" onclick="uploadAndAnalyze()">
+                        🚀 Upload &amp; Analyze
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== Progress Section ===== -->
+        <section id="section-progress" class="section">
+            <div class="card">
+                <h2>⏳ Analysis Progress</h2>
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <span class="progress-module" id="progress-module">Waiting...</span>
+                        <span class="progress-percent" id="progress-percent">0%</span>
+                    </div>
+                    <div class="progress-bar-wrapper">
+                        <div class="progress-bar" id="progress-bar"></div>
+                    </div>
+                    <p class="progress-message" id="progress-message">Preparing analysis pipeline...</p>
+                    <div class="progress-log" id="progress-log"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== Results Section ===== -->
+        <section id="section-results" class="section">
+            <div class="card">
+                <h2>📊 Trajectory Statistics</h2>
+                <div class="stats-grid" id="stats-grid"></div>
+            </div>
+
+            <div class="card">
+                <h2>📈 Analysis Plots</h2>
+                <div class="plot-tabs" id="plot-tabs"></div>
+                <div class="plot-container" id="plot-container"></div>
+            </div>
+        </section>
+
+        <!-- ===== Insights Section ===== -->
+        <section id="section-insights" class="section">
+            <div class="card">
+                <h2>🧠 AI-Generated Biological Insights</h2>
+                <div class="insights-list" id="insights-list"></div>
+            </div>
+        </section>
+
+        <!-- ===== 3D Viewer Section ===== -->
+        <section id="section-viewer" class="section">
+            <div class="card">
+                <h2>🔬 Interactive 3D Structure Viewer</h2>
+                <div class="viewer-container">
+                    <div class="viewer-3d" id="viewer-3d"></div>
+                    <div class="viewer-controls">
+                        <div class="control-group">
+                            <h4>Representation</h4>
+                            <select id="viewer-style" onchange="updateViewerStyle()">
+                                <option value="cartoon">Cartoon</option>
+                                <option value="stick">Stick</option>
+                                <option value="sphere">Sphere</option>
+                                <option value="line">Line</option>
+                                <option value="surface">Surface</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <h4>Color By</h4>
+                            <select id="viewer-color" onchange="updateViewerColor()">
+                                <option value="spectrum">Spectrum</option>
+                                <option value="chain">Chain</option>
+                                <option value="ss">Secondary Structure</option>
+                                <option value="rmsf">RMSF (B-factor)</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <h4>Background</h4>
+                            <select id="viewer-bg" onchange="updateViewerBg()">
+                                <option value="black">Black</option>
+                                <option value="dark">Dark Blue</option>
+                                <option value="white">White</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <h4>Highlight</h4>
+                            <select id="viewer-highlight" onchange="highlightResidues()">
+                                <option value="none">None</option>
+                                <option value="flexible">Flexible Residues</option>
+                                <option value="hinge">Hinge Residues</option>
+                                <option value="hubs">Communication Hubs</option>
+                                <option value="gnn">GNN Top Residues</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== Downloads Section ===== -->
+        <section id="section-downloads" class="section">
+            <div class="card">
+                <h2>📥 Download Reports</h2>
+                <div class="download-grid">
+                    <div class="download-card" onclick="downloadReport('html')">
+                        <div class="icon">📄</div>
+                        <div class="label">HTML Report</div>
+                        <div class="desc">Full analysis with interactive plots</div>
+                    </div>
+                    <div class="download-card" onclick="downloadReport('csv')">
+                        <div class="icon">📊</div>
+                        <div class="label">CSV Metrics</div>
+                        <div class="desc">Comprehensive numerical data export</div>
+                    </div>
+                    <div class="download-card" onclick="downloadReport('pdf')">
+                        <div class="icon">📕</div>
+                        <div class="label">PDF Report</div>
+                        <div class="desc">Publication-ready report with plots</div>
+                    </div>
+                    <div class="download-card" onclick="downloadReport('json')">
+                        <div class="icon">🔧</div>
+                        <div class="label">JSON Results</div>
+                        <div class="desc">Complete machine-readable results</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
