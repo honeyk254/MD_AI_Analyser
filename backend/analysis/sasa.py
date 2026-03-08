@@ -1,39 +1,79 @@
+"""Solvent Accessible Surface Area (SASA) analysis.
+
+Tracks protein surface exposure over time using MDTraj's Shrake--Rupley
+algorithm.  Identifies buried (core) and exposed (surface) residues
+based on their average SASA relative to the population mean.
 """
-Solvent Accessible Surface Area (SASA) analysis.
-Tracks protein surface exposure over time.
-"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List
+
 import numpy as np
+import MDAnalysis as mda
+
+logger = logging.getLogger("md_ai_analyzer")
 
 
-def compute_sasa(universe, **kwargs):
-    """
-    Compute SASA over the trajectory using MDTraj.
+def compute_sasa(
+    universe: mda.Universe,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Compute SASA over the trajectory using MDTraj Shrake--Rupley.
 
-    Returns dict with:
-        - time: timestamps
-        - total_sasa: total SASA per frame (nm²)
-        - per_residue_sasa: average SASA per residue
-        - resids: residue IDs
-        - buried_residues: residues with very low SASA (core)
-        - exposed_residues: residues with high SASA (surface)
+    Parameters
+    ----------
+    universe : mda.Universe
+        MDAnalysis Universe with a loaded trajectory.
+    **kwargs : Any
+        Additional keyword arguments (unused, accepted for API consistency).
+
+    Returns
+    -------
+    dict[str, Any]
+        ``time``
+            List of timestamps (ps).
+        ``total_sasa``
+            Total SASA per frame (nm squared).
+        ``per_residue_sasa``
+            Average per-residue SASA.
+        ``resids``
+            Residue IDs.
+        ``mean_total_sasa``
+            Mean total SASA across all frames.
+        ``buried_residues``
+            Residues with SASA below (mean - 1 std).
+        ``exposed_residues``
+            Residues with SASA above (mean + 1 std).
     """
     try:
         import mdtraj as md
 
         protein = universe.select_atoms("protein")
         if len(protein) == 0:
+            logger.warning("No protein atoms found for SASA analysis")
             return {"error": "No protein atoms found"}
 
-        positions = []
-        times = []
-        for ts in universe.trajectory:
-            positions.append(protein.positions.copy() / 10.0)  # Å to nm
-            times.append(float(ts.time))
+        n_frames: int = len(universe.trajectory)
+        logger.info(
+            "Computing SASA for %d protein atoms over %d frames",
+            len(protein),
+            n_frames,
+        )
 
-        # Build an mdtraj topology
+        # Collect positions and convert Angstrom -> nm for MDTraj
+        positions = np.empty(
+            (n_frames, len(protein), 3), dtype=np.float64
+        )
+        times = np.empty(n_frames, dtype=np.float64)
+        for i, ts in enumerate(universe.trajectory):
+            positions[i] = protein.positions / 10.0  # Angstrom -> nm
+            times[i] = ts.time
+
+        # Build MDTraj topology
         topology = md.Topology()
         chain = topology.add_chain()
-        prev_resid = None
+        prev_resid: int | None = None
         res_obj = None
         for atom in protein:
             if atom.resid != prev_resid:
@@ -45,25 +85,42 @@ def compute_sasa(universe, **kwargs):
                 element = md.element.carbon
             topology.add_atom(atom.name, element, res_obj)
 
-        traj = md.Trajectory(np.array(positions), topology)
-        sasa = md.shrake_rupley(traj, mode='residue')  # (n_frames, n_residues)
+        traj = md.Trajectory(positions, topology)
 
-        total_sasa = sasa.sum(axis=1).tolist()
-        avg_per_residue = sasa.mean(axis=0).tolist()
+        # Shrake-Rupley SASA per residue: (n_frames, n_residues)
+        sasa: np.ndarray = md.shrake_rupley(traj, mode="residue")
 
-        resids = sorted(set(protein.resids.tolist()))
-        n_res = min(len(resids), len(avg_per_residue))
+        total_sasa: List[float] = sasa.sum(axis=1).tolist()
+        avg_per_residue: np.ndarray = sasa.mean(axis=0)
 
-        mean_sasa = np.mean(avg_per_residue[:n_res])
-        std_sasa = np.std(avg_per_residue[:n_res])
+        resids: List[int] = sorted(set(protein.resids.tolist()))
+        n_res: int = min(len(resids), len(avg_per_residue))
 
-        buried = [int(resids[i]) for i in range(n_res) if avg_per_residue[i] < mean_sasa - std_sasa]
-        exposed = [int(resids[i]) for i in range(n_res) if avg_per_residue[i] > mean_sasa + std_sasa]
+        avg_trimmed = avg_per_residue[:n_res]
+        mean_sasa = float(np.mean(avg_trimmed))
+        std_sasa = float(np.std(avg_trimmed))
+
+        # Vectorised buried/exposed classification
+        buried: List[int] = [
+            int(resids[i])
+            for i in np.where(avg_trimmed < mean_sasa - std_sasa)[0]
+        ]
+        exposed: List[int] = [
+            int(resids[i])
+            for i in np.where(avg_trimmed > mean_sasa + std_sasa)[0]
+        ]
+
+        logger.info(
+            "SASA complete: mean total=%.2f nm^2, %d buried, %d exposed residues",
+            float(np.mean(total_sasa)),
+            len(buried),
+            len(exposed),
+        )
 
         return {
-            "time": times,
+            "time": times.tolist(),
             "total_sasa": total_sasa,
-            "per_residue_sasa": avg_per_residue[:n_res],
+            "per_residue_sasa": avg_trimmed.tolist(),
             "resids": resids[:n_res],
             "mean_total_sasa": float(np.mean(total_sasa)),
             "buried_residues": buried,
@@ -71,4 +128,5 @@ def compute_sasa(universe, **kwargs):
         }
 
     except Exception as e:
+        logger.error("SASA computation failed: %s", e, exc_info=True)
         return {"error": str(e)}

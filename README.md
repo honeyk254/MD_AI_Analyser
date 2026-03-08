@@ -2,35 +2,36 @@
 
 **AI-Powered Molecular Dynamics Trajectory Analysis Platform**
 
-An advanced local platform that analyzes GROMACS MD simulation outputs using classical MD metrics, machine learning, graph neural networks, transformers, variational autoencoders, and biological inference — then explains the biology behind the motions.
+An advanced local platform that analyzes GROMACS MD simulation outputs using classical MD metrics, machine learning, graph neural networks, transformers, variational autoencoders, and biological inference -- then explains the biology behind the motions.
 
 ---
 
 ## Features
 
-### Classical MD Analysis (17 modules)
+### Classical MD Analysis (21 modules)
 - RMSD, RMSF, Radius of Gyration
 - Secondary Structure Evolution (DSSP)
 - Hydrogen Bonds, Salt Bridges, Water Bridges
 - Contact Maps & Distance Matrices
 - Principal Component Analysis (PCA)
 - Dynamic Cross-Correlation Matrix (DCCM)
-- Conformational Clustering
-- Free Energy Landscape
+- Conformational Clustering (KMeans / HDBSCAN / GMM)
+- Free Energy Landscape (Boltzmann inversion)
 - Solvent Accessible Surface Area (SASA)
 - Time-lagged Independent Component Analysis (tICA)
-- Normal Mode Analysis (ANM-based B-factors, mode collectivity)
+- Normal Mode Analysis (ANM-based, vectorised Hessian)
 - Perturbation Response Scanning (effector/sensor identification)
 - Energy Decomposition (per-residue LJ + Coulomb)
-- Configurational Entropy (Schlitter's method)
+- Configurational Entropy (Schlitter's method with explicit kBT)
 - Convergence Assessment (block averaging, autocorrelation, cosine content)
-- Binding Kinetics (residence time, kon/koff, contact survival — ligand-dependent)
+- Binding Kinetics (residence time, kon/koff, contact survival)
+- Trajectory Comparison (two-trajectory or half-split equilibration check)
 
 ### Machine Learning (10 modules)
 - Conformational State Discovery (HDBSCAN / GMM / KMeans)
-- Markov State Models (transition matrix, MFPT, timescales)
+- Markov State Models (validated transition matrix, MFPT, timescales)
 - Allosteric Pathway Detection (graph centrality, community detection)
-- Dynamic Domain Detection (spectral clustering)
+- Dynamic Domain Detection (spectral clustering on DCCM)
 - Ligand Interaction Analysis
 - Dimensionality Reduction (PCA / UMAP / t-SNE)
 - Interaction Fingerprints (hydrophobic, salt bridge, aromatic contacts)
@@ -53,7 +54,7 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
   - Latent density estimation
 
 ### AI Biological Inference Engine
-Automatically generates 38 types of biological interpretations, including:
+Automatically generates 38 types of biological interpretations via a data-driven detector dispatch, including:
 
 **Structural:**
 - Hinge residue detection
@@ -163,7 +164,7 @@ Navigate to: **http://localhost:8000**
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| Start/End Frame | — | Analyze a subtrajectory |
+| Start/End Frame | -- | Analyze a subtrajectory |
 | H-bond Cutoff | 3.5 A | Hydrogen bond distance threshold |
 | Contact Cutoff | 8.0 A | Contact map distance threshold |
 | Salt Bridge Cutoff | 4.0 A | Salt bridge distance threshold |
@@ -173,22 +174,28 @@ Navigate to: **http://localhost:8000**
 | Grid Spacing | 2.0 A | Tunnel/cavity detection grid resolution |
 | DCCM Threshold | 0.5 | Correlation threshold for network edges |
 | VAE Latent Dim | 2 | Variational autoencoder latent dimensions |
-| Ligand Selection | — | MDAnalysis selection string for ligand |
+| Ligand Selection | -- | MDAnalysis selection string for ligand |
 
 ---
 
-## Project Structure
+## Architecture
 
 ```
 md_ai_analyzer/
-├── run.py                          # Entry point
+├── run.py                          # Entry point (uvicorn launcher)
 ├── requirements.txt                # Dependencies
 ├── backend/
-│   ├── main.py                     # FastAPI application
-│   ├── config.py                   # Configuration & GPU detection
-│   ├── models.py                   # Pydantic schemas
-│   ├── orchestrator.py             # Analysis pipeline manager
-│   ├── analysis/                   # Classical MD analysis (17 modules)
+│   ├── main.py                     # FastAPI app, routes, middleware
+│   ├── config.py                   # Configuration, paths, device detection
+│   ├── models.py                   # Pydantic schemas (request/response/result)
+│   ├── orchestrator.py             # Analysis pipeline coordinator
+│   │
+│   ├── utils/                      # Shared utility modules
+│   │   ├── trajectory_utils.py     # CA selection, coordinate collection, DCCM
+│   │   ├── ml_feature_utils.py     # PCA, clustering, scaling, seed management
+│   │   └── plotting_utils.py       # Dark theme, color constants, safe_plot
+│   │
+│   ├── analysis/                   # Classical MD analysis (21 modules)
 │   │   ├── rmsd.py                 # Root mean square deviation
 │   │   ├── rmsf.py                 # Root mean square fluctuation
 │   │   ├── radius_of_gyration.py   # Radius of gyration
@@ -203,12 +210,14 @@ md_ai_analyzer/
 │   │   ├── free_energy.py          # Free energy landscape
 │   │   ├── sasa.py                 # Solvent accessible surface area
 │   │   ├── tica.py                 # Time-lagged ICA
-│   │   ├── nma.py                  # Normal mode analysis (ANM)
+│   │   ├── nma.py                  # Normal mode analysis (vectorised ANM)
 │   │   ├── prs.py                  # Perturbation response scanning
 │   │   ├── energy_decomposition.py # Per-residue energy decomposition
-│   │   ├── entropy.py              # Configurational entropy
+│   │   ├── entropy.py              # Configurational entropy (Schlitter)
 │   │   ├── convergence.py          # Simulation convergence assessment
-│   │   └── binding_kinetics.py     # Ligand binding kinetics
+│   │   ├── binding_kinetics.py     # Ligand binding kinetics
+│   │   └── trajectory_comparison.py# Two-trajectory / half-split comparison
+│   │
 │   ├── ml/                         # Machine learning (10 modules)
 │   │   ├── state_discovery.py      # HDBSCAN/GMM/KMeans clustering
 │   │   ├── msm.py                  # Markov State Models
@@ -220,22 +229,50 @@ md_ai_analyzer/
 │   │   ├── tunnel_detection.py     # Cavity/tunnel detection
 │   │   ├── dynamic_network.py      # Time-windowed network analysis
 │   │   └── vae_latent.py           # Variational autoencoder
+│   │
 │   ├── gnn_models/                 # Graph Neural Networks
 │   │   └── residue_gnn.py          # GAT+GCN hybrid
+│   │
 │   ├── transformer_models/         # Transformer architectures
 │   │   └── trajectory_transformer.py
+│   │
 │   ├── bio_inference/              # Biological interpretation
-│   │   └── engine.py               # 38 insight types
+│   │   └── engine.py               # 38-detector dispatch engine
+│   │
 │   └── visualization/              # Plotting & reports
 │       ├── plots.py                # 31 Plotly chart generators
 │       └── report_generator.py     # HTML, CSV & PDF reports
+│
 ├── frontend/
 │   ├── index.html                  # Main SPA
 │   ├── style.css                   # Dark theme design system
 │   └── app.js                      # Application logic
+│
 ├── uploads/                        # Uploaded files (gitignored)
 └── results/                        # Analysis outputs (gitignored)
 ```
+
+### Shared Utilities (`backend/utils/`)
+
+The `utils` package eliminates code duplication across 40+ analysis and ML modules:
+
+**`trajectory_utils.py`** -- Central trajectory data access:
+- `select_ca_atoms()` -- C-alpha atom selection with validation
+- `collect_ca_positions()` -- Materialise full trajectory positions `(n_frames, n_res, 3)`
+- `collect_ca_coords_flat()` -- Flattened coordinates `(n_frames, n_res*3)` for ML input
+- `compute_dccm_from_positions()` -- Vectorised DCCM via `einsum`, computed once and shared
+- `residue_contributions_from_eigenvector()` -- Per-residue contributions from PCA/tICA eigenvectors
+
+**`ml_feature_utils.py`** -- Shared ML preprocessing:
+- `pca_reduce()` -- PCA with automatic component clamping
+- `find_optimal_k()` -- Silhouette-based optimal cluster count
+- `standardise_features()` -- Zero-mean unit-variance scaling
+- `set_global_seed()` -- Reproducibility across numpy + torch
+
+**`plotting_utils.py`** -- Unified visualisation theme:
+- `apply_dark_theme()` -- Consistent Plotly dark layout
+- `safe_plot()` -- Decorator that catches errors per-plot without aborting the pipeline
+- Named colour constants (`ACCENT_CYAN`, `ACCENT_RED`, ..., `COMMUNITY_COLORS`)
 
 ---
 
@@ -254,18 +291,44 @@ md_ai_analyzer/
 | `GET` | `/api/pdf/{job_id}` | Download PDF report |
 | `GET` | `/api/structure/{job_id}` | Fetch structure file for 3D viewer |
 
-**Security:** Rate limiting (60 req/min per IP), security headers, request ID tracking, input validation and filename sanitization.
+**Security:** Rate limiting (60 req/min per IP), CORS, security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy), request ID tracing, input validation, filename sanitization.
+
+---
+
+## Key Design Decisions
+
+### Concurrency Safety
+The orchestrator uses a local `params` dict per `run_analysis()` call rather than shared instance state, preventing race conditions when multiple jobs run concurrently.
+
+### Trajectory I/O
+Trajectory coordinates are collected once via shared utility functions (`collect_ca_positions`, `collect_ca_coords_flat`) and reused across modules, avoiding redundant `O(n_frames)` iterations per analysis.
+
+### Vectorised Computation
+Performance-critical code uses numpy vectorisation:
+- **NMA Hessian**: Built via broadcasting instead of `O(N^2)` Python loops
+- **DCCM**: Computed via `np.einsum("fid,fjd->ij", delta, delta)`
+- **Interaction fingerprints**: `np.triu_indices` + boolean masking
+- **Salt bridges / H-bonds**: `np.argwhere` and `np.bincount`
+
+### ML Reproducibility
+All ML and deep learning modules call `set_global_seed(42)` before model initialisation, ensuring deterministic results across runs (given the same input).
+
+### Graceful Degradation
+- PyTorch is optional: if not installed, GNN, Transformer, and VAE modules are skipped
+- Each analysis module catches its own exceptions; a single module failure does not abort the pipeline
+- The `@safe_plot` decorator ensures individual plot failures do not prevent other plots from rendering
 
 ---
 
 ## Extensibility
 
 The modular architecture supports extension for:
-- **AlphaFold models** — upload predicted structures as reference
-- **Docking trajectories** — use ligand selection parameter
-- **Coarse-grained simulations** — works with any MDAnalysis-compatible format
-- **Enhanced sampling** — tICA and MSM handle replica exchange / metadynamics data
-- **Custom analysis** — add new modules to `backend/analysis/` or `backend/ml/`
+- **AlphaFold models** -- upload predicted structures as reference
+- **Docking trajectories** -- use ligand selection parameter
+- **Coarse-grained simulations** -- works with any MDAnalysis-compatible format
+- **Enhanced sampling** -- tICA and MSM handle replica exchange / metadynamics data
+- **Custom analysis** -- add new modules to `backend/analysis/` or `backend/ml/`
+- **Custom plots** -- add a generator to `plots.py` and register it in the `generators` list
 
 ---
 

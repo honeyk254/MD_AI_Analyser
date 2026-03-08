@@ -1,182 +1,115 @@
 """
 Biological Inference Engine.
+
 Converts raw computational metrics into biologically meaningful explanations
-using structural biology reasoning.
+using structural biology reasoning.  Each detector method returns a list of
+insight dicts with schema::
+
+    {
+        "type": str,
+        "residues": list[int],
+        "description": str,
+        "confidence": float,
+        "evidence": list[str],
+        "category": str,   # structural | dynamic | allosteric | binding | transition
+    }
 """
+from __future__ import annotations
+
+import logging
+from typing import Any, Callable, Dict, List
+
 import numpy as np
-from typing import List, Dict, Any
+
+logger = logging.getLogger("md_ai_analyzer")
 
 
 class BiologicalInferenceEngine:
+    """Produce human-readable biological interpretations from analysis results.
+
+    All detector methods are called via :meth:`interpret`, which catches and
+    logs exceptions per-detector so that a failure in one does not prevent
+    the others from running.
     """
-    Takes all computed analysis results and generates human-readable
-    biological interpretations based on structural biology principles.
-    """
 
-    def interpret(self, result) -> List[Dict[str, Any]]:
+    # Ordered list of detector method names.  New detectors should be
+    # appended here rather than adding another try/except block.
+    _DETECTORS: list[str] = [
+        # Core structural / dynamic
+        "_detect_hinge_residues",
+        "_detect_flexible_loops",
+        "_detect_stable_core",
+        "_detect_allosteric_communication",
+        "_detect_binding_pocket_dynamics",
+        "_detect_conformational_transitions",
+        "_detect_domain_motions",
+        "_assess_protein_stability",
+        # ML / DL interpretation
+        "_interpret_gnn_results",
+        "_interpret_transformer_results",
+        # Part A — per-module interpretation
+        "_interpret_water_bridges",
+        "_interpret_energy_hotspots",
+        "_interpret_prs",
+        "_interpret_nma",
+        "_interpret_entropy",
+        "_interpret_tunnels",
+        "_interpret_dynamic_network",
+        "_interpret_vae",
+        "_interpret_ifp",
+        # Part B — advanced biological inferences
+        "_detect_breathing_motions",
+        "_detect_cracking_events",
+        "_detect_cryptic_binding_sites",
+        "_score_druggability",
+        "_predict_ptm_sites",
+        "_detect_ppi_hotspots",
+        "_detect_interface_dynamics",
+        "_infer_protonation_dynamics",
+        "_detect_electrostatic_funnels",
+        "_detect_aggregation_prone_regions",
+        "_detect_folding_intermediates",
+        "_classify_functional_motions",
+        "_correlate_motions_to_function",
+        "_detect_hbond_network_rewiring",
+        "_identify_structural_waters",
+        "_map_local_stiffness",
+        "_detect_force_propagation",
+        "_predict_mutation_sensitivity",
+        "_predict_stability_changes",
+    ]
+
+    def interpret(self, result: Any) -> List[Dict[str, Any]]:
+        """Generate biological insights from all analysis results.
+
+        Parameters
+        ----------
+        result : AnalysisResult
+            The fully populated analysis result object.
+
+        Returns
+        -------
+        list[dict]
+            Insight dicts sorted by descending confidence.
         """
-        Generate biological insights from all analysis results.
-        Each insight is a dict with: type, residues, description, confidence, evidence, category.
-        """
-        insights = []
+        insights: List[Dict[str, Any]] = []
 
-        try:
-            insights.extend(self._detect_hinge_residues(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_flexible_loops(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_stable_core(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_allosteric_communication(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_binding_pocket_dynamics(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_conformational_transitions(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_domain_motions(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._assess_protein_stability(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_gnn_results(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_transformer_results(result))
-        except Exception:
-            pass
-        # Part A new interpretations
-        try:
-            insights.extend(self._interpret_water_bridges(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_energy_hotspots(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_prs(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_nma(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_entropy(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_tunnels(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_dynamic_network(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_vae(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._interpret_ifp(result))
-        except Exception:
-            pass
+        for method_name in self._DETECTORS:
+            method: Callable = getattr(self, method_name, None)  # type: ignore[assignment]
+            if method is None:
+                logger.warning("Detector method not found: %s", method_name)
+                continue
+            try:
+                new_insights = method(result)
+                if new_insights:
+                    insights.extend(new_insights)
+            except Exception:
+                logger.debug(
+                    "Detector '%s' raised an exception", method_name,
+                    exc_info=True,
+                )
 
-        # Part B — Advanced Biological Inferences
-        try:
-            insights.extend(self._detect_breathing_motions(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_cracking_events(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_cryptic_binding_sites(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._score_druggability(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._predict_ptm_sites(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_ppi_hotspots(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_interface_dynamics(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._infer_protonation_dynamics(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_electrostatic_funnels(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_aggregation_prone_regions(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_folding_intermediates(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._classify_functional_motions(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._correlate_motions_to_function(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_hbond_network_rewiring(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._identify_structural_waters(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._map_local_stiffness(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._detect_force_propagation(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._predict_mutation_sensitivity(result))
-        except Exception:
-            pass
-        try:
-            insights.extend(self._predict_stability_changes(result))
-        except Exception:
-            pass
-
-        # Sort by confidence
+        # Sort by confidence descending
         insights.sort(key=lambda x: -x.get("confidence", 0))
         return insights
 

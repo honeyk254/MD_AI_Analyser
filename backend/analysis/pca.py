@@ -1,67 +1,101 @@
+"""Principal Component Analysis of protein backbone dynamics.
+
+Extracts dominant modes of motion from C-alpha coordinates using PCA,
+reporting explained variance, cumulative variance, and per-residue
+contributions to the leading principal components.
 """
-Principal Component Analysis of protein backbone dynamics.
-Extracts dominant modes of motion from Cα coordinates.
-"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict
+
 import numpy as np
-from sklearn.decomposition import PCA
+import MDAnalysis as mda
+
+from ..utils.trajectory_utils import (
+    select_ca_atoms,
+    collect_ca_coords_flat,
+    residue_contributions_from_eigenvector,
+)
+from ..utils.ml_feature_utils import pca_reduce
+
+logger = logging.getLogger("md_ai_analyzer")
 
 
-def compute_pca(universe, n_components=10, **kwargs):
-    """
-    Perform PCA on Cα atom coordinates across the trajectory.
+def compute_pca(
+    universe: mda.Universe,
+    n_components: int = 10,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Perform PCA on C-alpha atom coordinates across the trajectory.
 
-    Returns dict with:
-        - projections: list of [PC1, PC2, PC3, ...] per frame
-        - explained_variance: explained variance per component
-        - cumulative_variance: cumulative explained variance
-        - n_components: number of components
-        - pc1_residue_contributions: per-residue contribution to PC1
-        - pc2_residue_contributions: per-residue contribution to PC2
+    Parameters
+    ----------
+    universe : mda.Universe
+        MDAnalysis Universe with a loaded trajectory.
+    n_components : int
+        Maximum number of principal components to retain.
+    **kwargs : Any
+        Ignored; accepted for orchestrator compatibility.
+
+    Returns
+    -------
+    dict[str, Any]
+        Keys:
+
+        * ``projections`` -- per-frame projections onto PCs (list of lists).
+        * ``explained_variance`` -- explained variance ratio per component.
+        * ``cumulative_variance`` -- cumulative explained variance.
+        * ``n_components`` -- actual number of components returned.
+        * ``mean_structure`` -- average structure as list of [x, y, z] per
+          residue.
+        * ``resids`` -- residue IDs.
+        * ``pc1_residue_contributions`` -- per-residue contribution to PC1.
+        * ``pc2_residue_contributions`` -- per-residue contribution to PC2.
+        * ``pc3_residue_contributions`` -- per-residue contribution to PC3.
     """
     try:
-        ca = universe.select_atoms("protein and name CA")
-        if len(ca) == 0:
-            ca = universe.select_atoms("all")
+        ca: mda.AtomGroup = select_ca_atoms(universe)
+        n_atoms: int = len(ca)
 
-        n_atoms = len(ca)
+        # Collect flattened coordinates using shared utility
+        coords: np.ndarray = collect_ca_coords_flat(universe, atoms=ca)
 
-        # Collect coordinates
-        coords = []
-        for ts in universe.trajectory:
-            coords.append(ca.positions.flatten().copy())
+        # PCA via shared utility (handles clamping of n_components)
+        projections, pca_model = pca_reduce(coords, n_components=n_components)
+        n_comp: int = pca_model.n_components_
 
-        coords = np.array(coords)  # (n_frames, n_atoms*3)
+        # Mean structure reshaped to (n_atoms, 3)
+        mean_coords: np.ndarray = pca_model.mean_.reshape(-1, 3)
 
-        # Center
-        mean_coords = coords.mean(axis=0)
-        coords_centered = coords - mean_coords
+        # Per-residue contributions (vectorised via shared utility)
+        def _contrib(comp_idx: int) -> list[float]:
+            return residue_contributions_from_eigenvector(
+                pca_model.components_[comp_idx], n_atoms
+            ).tolist()
 
-        # PCA
-        n_comp = min(n_components, coords_centered.shape[0], coords_centered.shape[1])
-        pca = PCA(n_components=n_comp)
-        projections = pca.fit_transform(coords_centered)
+        resids: list[int] = ca.resids.tolist()
 
-        # Per-residue contributions to PCs (sum of x,y,z components per residue)
-        def residue_contributions(component_idx):
-            eigvec = pca.components_[component_idx]
-            contributions = np.zeros(n_atoms)
-            for i in range(n_atoms):
-                contributions[i] = np.sqrt(np.sum(eigvec[3*i:3*i+3]**2))
-            return contributions.tolist()
-
-        resids = ca.resids.tolist()
+        logger.info(
+            "PCA computed: %d components, cumulative variance %.2f%%",
+            n_comp,
+            float(np.sum(pca_model.explained_variance_ratio_) * 100),
+        )
 
         return {
             "projections": projections.tolist(),
-            "explained_variance": pca.explained_variance_ratio_.tolist(),
-            "cumulative_variance": np.cumsum(pca.explained_variance_ratio_).tolist(),
+            "explained_variance": pca_model.explained_variance_ratio_.tolist(),
+            "cumulative_variance": np.cumsum(
+                pca_model.explained_variance_ratio_
+            ).tolist(),
             "n_components": n_comp,
-            "mean_structure": mean_coords.reshape(-1, 3).tolist(),
+            "mean_structure": mean_coords.tolist(),
             "resids": resids,
-            "pc1_residue_contributions": residue_contributions(0) if n_comp > 0 else [],
-            "pc2_residue_contributions": residue_contributions(1) if n_comp > 1 else [],
-            "pc3_residue_contributions": residue_contributions(2) if n_comp > 2 else [],
+            "pc1_residue_contributions": _contrib(0) if n_comp > 0 else [],
+            "pc2_residue_contributions": _contrib(1) if n_comp > 1 else [],
+            "pc3_residue_contributions": _contrib(2) if n_comp > 2 else [],
         }
 
     except Exception as e:
+        logger.exception("PCA computation failed")
         return {"error": str(e), "projections": [], "explained_variance": []}

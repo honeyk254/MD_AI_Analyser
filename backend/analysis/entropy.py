@@ -1,80 +1,134 @@
+"""Configurational Entropy Estimation.
+
+Uses Schlitter's method to estimate an upper bound on the configurational
+entropy from the mass-weighted covariance matrix of C-alpha atom positions.
+
+Reference
+---------
+Schlitter, J. (1993). Estimation of absolute and relative entropies of
+macromolecules using the covariance matrix. *Chem. Phys. Lett.*, 215,
+617--621.
 """
-Configurational Entropy Estimation.
-Uses Schlitter's method to estimate configurational entropy
-from the mass-weighted covariance matrix of Cα atom positions.
-"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict
+
 import numpy as np
 from scipy.linalg import eigvalsh
 
+import MDAnalysis as mda
 
-# Physical constants
-KB = 1.380649e-23     # Boltzmann constant (J/K)
-HBAR = 1.054571817e-34  # Reduced Planck constant (J·s)
-NA = 6.02214076e23     # Avogadro's number
-AMU_TO_KG = 1.66054e-27  # atomic mass unit → kg
-ANG_TO_M = 1e-10        # Ångström → meters
-TEMP = 300.0             # Default temperature (K)
+from ..utils.trajectory_utils import select_ca_atoms, collect_ca_positions
+
+logger = logging.getLogger("md_ai_analyzer")
+
+# --------------- Physical constants (SI) --------------- #
+KB: float = 1.380649e-23       # Boltzmann constant  (J/K)
+HBAR: float = 1.054571817e-34  # Reduced Planck constant  (J*s)
+NA: float = 6.02214076e23      # Avogadro's number
+AMU_TO_KG: float = 1.66054e-27 # atomic mass unit -> kg
+ANG_TO_M: float = 1e-10        # angstrom -> metres
 
 
-def compute_entropy(universe, temperature=300.0, **kwargs):
-    """
-    Estimate configurational entropy using Schlitter's method.
+def compute_entropy(
+    universe: mda.Universe,
+    temperature: float = 300.0,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Estimate configurational entropy using Schlitter's formula.
 
-    S_Schlitter = 0.5 * kB * sum_i ln(1 + kBTe²/(ħ²) * λ_i)
-    where λ_i are eigenvalues of the mass-weighted covariance matrix.
+    .. math::
 
-    Returns dict with:
-        - total_entropy_J_mol_K: total entropy in J/(mol·K)
-        - total_entropy_kJ_mol_K: total entropy in kJ/(mol·K)
-        - per_residue_entropy: per-residue entropy contribution
-        - resids: residue IDs
-        - entropy_convergence: entropy estimated from increasing trajectory fractions
+        S_{\\text{Schlitter}} \\le \\frac{k_B}{2}
+        \\sum_i \\ln\\!\\left(1 + \\frac{k_B T \\, e^2}{\\hbar^2}
+        \\lambda_i\\right)
+
+    where :math:`\\lambda_i` are eigenvalues of the mass-weighted
+    covariance matrix and :math:`k_B T` is the thermal energy.
+
+    Parameters
+    ----------
+    universe : mda.Universe
+        MDAnalysis Universe with a loaded trajectory.
+    temperature : float
+        Temperature in Kelvin (default 300 K).
+    **kwargs : Any
+        Ignored; accepted for orchestrator compatibility.
+
+    Returns
+    -------
+    dict[str, Any]
+        Keys:
+
+        * ``total_entropy_J_mol_K`` -- total entropy in J/(mol*K).
+        * ``total_entropy_kJ_mol_K`` -- total entropy in kJ/(mol*K).
+        * ``per_residue_entropy`` -- per-residue entropy contribution.
+        * ``resids`` -- residue IDs.
+        * ``entropy_convergence`` -- entropy computed from increasing
+          trajectory fractions (20 %, 40 %, ..., 100 %).
+        * ``temperature_K`` -- temperature used.
+        * ``n_frames_used`` -- total number of frames.
+
+    Notes
+    -----
+    Positions are converted from angstrom to metres and masses from AMU
+    to kg so that the covariance matrix has SI units (kg*m**2) and the
+    Schlitter formula is applied consistently.
     """
     try:
-        ca = universe.select_atoms("protein and name CA")
-        if len(ca) == 0:
-            return {"error": "No CA atoms found"}
+        ca: mda.AtomGroup = select_ca_atoms(universe)
+        n_res: int = len(ca)
+        resids: list[int] = ca.resids.tolist()
 
-        n_res = len(ca)
-        resids = ca.resids.tolist()
-
-        # Get masses
+        # Masses in AMU (fall back to carbon mass if topology lacks masses)
         try:
-            masses = ca.masses  # in amu
-        except Exception:
-            masses = np.full(n_res, 12.0)  # default carbon mass
+            masses: np.ndarray = ca.masses  # type: ignore[assignment]
+        except (AttributeError, mda.NoDataError):
+            logger.warning("Masses unavailable; using default 12.0 AMU for CA")
+            masses = np.full(n_res, 12.0)
 
-        # Collect positions
-        positions = []
-        for ts in universe.trajectory:
-            positions.append(ca.positions.copy())
-        positions = np.array(positions)  # (n_frames, n_res, 3)
-        n_frames = positions.shape[0]
+        # Collect positions via shared utility: (n_frames, n_res, 3) in Ang
+        positions: np.ndarray = collect_ca_positions(universe, atoms=ca)
+        n_frames: int = positions.shape[0]
 
         if n_frames < 10:
-            return {"error": "Too few frames for entropy estimation"}
+            msg = "Too few frames for entropy estimation"
+            logger.error(msg)
+            return {"error": msg}
 
-        # Convert to meters and kg
-        pos_m = positions * ANG_TO_M  # (n_frames, n_res, 3) in meters
-        masses_kg = masses * AMU_TO_KG  # in kg
+        # Convert to SI units
+        pos_m: np.ndarray = positions * ANG_TO_M          # metres
+        masses_kg: np.ndarray = masses * AMU_TO_KG         # kg
 
-        # Compute total entropy from full trajectory
-        total_entropy = _schlitter_entropy(pos_m, masses_kg, temperature)
+        # Full-trajectory entropy
+        total_entropy: float = _schlitter_entropy(pos_m, masses_kg, temperature)
 
-        # Per-residue entropy (3 DOF per residue)
-        per_res_entropy = _per_residue_entropy(pos_m, masses_kg, temperature)
+        # Per-residue entropy (3 DOF each)
+        per_res_entropy: np.ndarray = _per_residue_entropy(
+            pos_m, masses_kg, temperature
+        )
 
-        # Convergence: compute entropy from 20%, 40%, 60%, 80%, 100% of trajectory
-        convergence = []
+        # Convergence over trajectory fractions
         fractions = [0.2, 0.4, 0.6, 0.8, 1.0]
+        convergence: list[dict[str, Any]] = []
         for frac in fractions:
             n = max(10, int(n_frames * frac))
             s = _schlitter_entropy(pos_m[:n], masses_kg, temperature)
-            convergence.append({
-                "fraction": frac,
-                "n_frames": n,
-                "entropy_J_mol_K": round(float(s), 2),
-            })
+            convergence.append(
+                {
+                    "fraction": frac,
+                    "n_frames": n,
+                    "entropy_J_mol_K": round(float(s), 2),
+                }
+            )
+
+        logger.info(
+            "Entropy (Schlitter) at T=%.1f K: %.2f J/(mol*K) from %d frames",
+            temperature,
+            total_entropy,
+            n_frames,
+        )
 
         return {
             "total_entropy_J_mol_K": round(float(total_entropy), 2),
@@ -87,58 +141,112 @@ def compute_entropy(universe, temperature=300.0, **kwargs):
         }
 
     except Exception as e:
+        logger.exception("Entropy computation failed")
         return {"error": str(e)}
 
 
-def _schlitter_entropy(positions_m, masses_kg, temp):
-    """
-    Compute Schlitter entropy.
-    positions_m: (n_frames, n_atoms, 3) in meters
-    masses_kg: (n_atoms,) in kg
+# ------------------------------------------------------------------ #
+#  Internal helpers                                                    #
+# ------------------------------------------------------------------ #
+
+
+def _schlitter_entropy(
+    positions_m: np.ndarray,
+    masses_kg: np.ndarray,
+    temperature: float,
+) -> float:
+    """Compute the Schlitter entropy upper bound.
+
+    Parameters
+    ----------
+    positions_m : np.ndarray
+        Shape ``(n_frames, n_atoms, 3)`` in metres.
+    masses_kg : np.ndarray
+        Shape ``(n_atoms,)`` in kg.
+    temperature : float
+        Temperature in K.
+
+    Returns
+    -------
+    float
+        Entropy in J/(mol*K).
     """
     n_frames, n_atoms, _ = positions_m.shape
 
     # Flatten to (n_frames, 3N)
-    flat = positions_m.reshape(n_frames, n_atoms * 3)
-    mean = flat.mean(axis=0)
-    delta = flat - mean
+    flat: np.ndarray = positions_m.reshape(n_frames, n_atoms * 3)
+    mean: np.ndarray = flat.mean(axis=0)
+    delta: np.ndarray = flat - mean
 
-    # Mass-weight: multiply each coordinate by sqrt(mass)
-    mass_weights = np.repeat(np.sqrt(masses_kg), 3)
-    delta_mw = delta * mass_weights[np.newaxis, :]
+    # Mass-weight each coordinate by sqrt(m_i)
+    mass_weights: np.ndarray = np.repeat(np.sqrt(masses_kg), 3)
+    delta_mw: np.ndarray = delta * mass_weights[np.newaxis, :]
 
-    # Covariance matrix
-    cov = np.cov(delta_mw.T)
+    # Covariance of mass-weighted fluctuations (units: kg * m**2)
+    cov: np.ndarray = np.cov(delta_mw.T)
 
-    # Schlitter formula: S = 0.5 * kB * sum ln(1 + kBTe²/ħ² * λ_i)
-    eigenvalues = eigvalsh(cov)
-    eigenvalues = np.maximum(eigenvalues, 0)  # numerical safety
+    # Eigenvalues -- clamp to non-negative for numerical safety
+    eigenvalues: np.ndarray = eigvalsh(cov)
+    eigenvalues = np.maximum(eigenvalues, 0.0)
 
-    factor = KB * temp * np.e ** 2 / (HBAR ** 2)
-    log_terms = np.log(1.0 + factor * eigenvalues)
-    entropy = 0.5 * KB * NA * np.sum(log_terms)  # J/(mol·K)
+    # Schlitter factor: kB*T*e**2 / hbar**2  (units: 1/(kg*m**2))
+    kT: float = KB * temperature
+    factor: float = kT * np.e ** 2 / (HBAR ** 2)
+
+    # S = (kB / 2) * N_A * sum_i ln(1 + factor * lambda_i)
+    log_terms: np.ndarray = np.log1p(factor * eigenvalues)
+    entropy: float = 0.5 * KB * NA * float(np.sum(log_terms))
 
     return entropy
 
 
-def _per_residue_entropy(positions_m, masses_kg, temp):
-    """Compute per-residue entropy using 3 DOF per residue."""
+def _per_residue_entropy(
+    positions_m: np.ndarray,
+    masses_kg: np.ndarray,
+    temperature: float,
+) -> np.ndarray:
+    """Compute per-residue entropy using each residue's 3 DOF.
+
+    Parameters
+    ----------
+    positions_m : np.ndarray
+        Shape ``(n_frames, n_atoms, 3)`` in metres.
+    masses_kg : np.ndarray
+        Shape ``(n_atoms,)`` in kg.
+    temperature : float
+        Temperature in K.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_atoms,)`` -- per-residue entropy in J/(mol*K).
+    """
     n_frames, n_atoms, _ = positions_m.shape
-    per_res = np.zeros(n_atoms)
 
-    factor = KB * temp * np.e ** 2 / (HBAR ** 2)
+    kT: float = KB * temperature
+    factor: float = kT * np.e ** 2 / (HBAR ** 2)
 
-    for i in range(n_atoms):
-        pos_i = positions_m[:, i, :]  # (n_frames, 3)
-        mass_i = masses_kg[i]
-        delta = pos_i - pos_i.mean(axis=0)
-        delta_mw = delta * np.sqrt(mass_i)
-        cov_i = np.cov(delta_mw.T)  # 3x3
+    per_res: np.ndarray = np.zeros(n_atoms, dtype=np.float64)
 
-        eigenvalues = eigvalsh(cov_i)
-        eigenvalues = np.maximum(eigenvalues, 0)
+    # Vectorise the mean subtraction and mass-weighting across all residues
+    mean_pos: np.ndarray = positions_m.mean(axis=0)           # (n_atoms, 3)
+    delta: np.ndarray = positions_m - mean_pos                 # (n_frames, n_atoms, 3)
+    sqrt_masses: np.ndarray = np.sqrt(masses_kg)               # (n_atoms,)
+    delta_mw: np.ndarray = delta * sqrt_masses[np.newaxis, :, np.newaxis]  # mass-weight
 
-        log_terms = np.log(1.0 + factor * eigenvalues)
-        per_res[i] = 0.5 * KB * NA * np.sum(log_terms)
+    # For each residue the 3x3 covariance is small; compute all at once
+    # delta_mw[:, i, :] has shape (n_frames, 3)
+    # Batched covariance: C_i = delta_mw[:, i, :].T @ delta_mw[:, i, :] / (N-1)
+    # Using einsum: (n_atoms, 3, 3)
+    cov_batch: np.ndarray = np.einsum(
+        "fia,fib->iab", delta_mw, delta_mw
+    ) / (n_frames - 1)
+
+    # Eigenvalues of each 3x3 matrix (vectorised via np.linalg.eigvalsh)
+    eig_batch: np.ndarray = np.linalg.eigvalsh(cov_batch)     # (n_atoms, 3)
+    eig_batch = np.maximum(eig_batch, 0.0)
+
+    log_terms: np.ndarray = np.log1p(factor * eig_batch)      # (n_atoms, 3)
+    per_res = 0.5 * KB * NA * log_terms.sum(axis=1)
 
     return per_res

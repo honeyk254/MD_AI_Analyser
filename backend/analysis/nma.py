@@ -1,99 +1,136 @@
+"""Normal Mode Analysis (NMA).
+
+Computes elastic network model normal modes from the MD-average C-alpha
+structure using an Anisotropic Network Model (ANM) with a fully
+vectorised Hessian construction.
 """
-Normal Mode Analysis (NMA).
-Computes elastic network model normal modes from the MD-average Cα structure
-using an Anisotropic Network Model (ANM).
-"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict
+
 import numpy as np
 from scipy.linalg import eigh
-from MDAnalysis.lib.distances import distance_array
+
+import MDAnalysis as mda
+
+from ..utils.trajectory_utils import select_ca_atoms, collect_ca_positions
+
+logger = logging.getLogger("md_ai_analyzer")
 
 
-def compute_nma(universe, n_modes=10, cutoff=15.0, gamma=1.0, **kwargs):
-    """
-    Normal Mode Analysis using Anisotropic Network Model (ANM).
+def compute_nma(
+    universe: mda.Universe,
+    n_modes: int = 10,
+    cutoff: float = 15.0,
+    gamma: float = 1.0,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Normal Mode Analysis using an Anisotropic Network Model (ANM).
 
-    Builds the Hessian from the MD-average Cα structure and diagonalises it
-    to obtain the slowest collective modes.
+    Builds the 3N x 3N Hessian from the MD-average C-alpha structure and
+    diagonalises it to obtain the slowest collective modes of motion.
 
-    Returns dict with:
-        - resids: residue IDs
-        - eigenvalues: eigenvalues of the first n_modes non-trivial modes
-        - frequencies: mode frequencies (sqrt of eigenvalue)
-        - bfactors: per-residue predicted B-factors from ANM
-        - mode_collectivity: collectivity index for each mode
-        - mode_shapes: per-residue displacement magnitude for each mode
-        - pca_overlap: overlap between ANM modes and PCA eigenvectors (if PCA was run)
+    Parameters
+    ----------
+    universe : mda.Universe
+        MDAnalysis Universe with a loaded trajectory.
+    n_modes : int
+        Number of non-trivial modes to report (after removing the 6
+        rigid-body modes).
+    cutoff : float
+        Distance cutoff in angstrom for ANM springs.
+    gamma : float
+        Uniform spring constant.
+    **kwargs : Any
+        Ignored; accepted for orchestrator compatibility.
+
+    Returns
+    -------
+    dict[str, Any]
+        Keys:
+
+        * ``resids`` -- residue IDs.
+        * ``eigenvalues`` -- eigenvalues of the first *n_modes* non-trivial
+          modes.
+        * ``frequencies`` -- mode frequencies (sqrt of eigenvalue).
+        * ``bfactors`` -- normalised per-residue predicted B-factors.
+        * ``mode_collectivity`` -- collectivity index for each mode.
+        * ``mode_shapes`` -- per-residue displacement magnitude for the
+          first 5 modes.
+        * ``n_modes_computed`` -- number of modes actually returned.
     """
     try:
-        ca = universe.select_atoms("protein and name CA")
-        if len(ca) == 0:
-            return {"error": "No CA atoms found"}
+        ca: mda.AtomGroup = select_ca_atoms(universe)
+        n_res: int = len(ca)
+        resids: list[int] = ca.resids.tolist()
 
-        n_res = len(ca)
-        resids = ca.resids.tolist()
+        # Average structure from trajectory
+        positions: np.ndarray = collect_ca_positions(universe, atoms=ca)
+        mean_pos: np.ndarray = positions.mean(axis=0)  # (n_res, 3)
 
-        # Compute average structure
-        positions = []
-        for ts in universe.trajectory:
-            positions.append(ca.positions.copy())
-        positions = np.array(positions)
-        mean_pos = positions.mean(axis=0)  # (n_res, 3)
-
-        # Build ANM Hessian
-        hessian = _build_anm_hessian(mean_pos, cutoff, gamma)
+        # Build vectorised ANM Hessian
+        hessian: np.ndarray = _build_anm_hessian_vectorised(
+            mean_pos, cutoff, gamma
+        )
 
         # Diagonalise (real symmetric matrix)
         eigenvalues, eigenvectors = eigh(hessian)
 
         # Skip first 6 trivial modes (translations + rotations)
-        nontrivial_start = 6
-        evals = eigenvalues[nontrivial_start: nontrivial_start + n_modes]
-        evecs = eigenvectors[:, nontrivial_start: nontrivial_start + n_modes]
+        nontrivial_start: int = 6
+        evals: np.ndarray = eigenvalues[nontrivial_start: nontrivial_start + n_modes]
+        evecs: np.ndarray = eigenvectors[:, nontrivial_start: nontrivial_start + n_modes]
+        n_actual: int = len(evals)
 
-        # Frequencies
-        frequencies = []
-        for ev in evals:
-            if ev > 1e-10:
-                frequencies.append(round(float(np.sqrt(ev)), 6))
-            else:
-                frequencies.append(0.0)
+        # Frequencies (vectorised)
+        freq_arr: np.ndarray = np.where(
+            evals > 1e-10, np.sqrt(np.maximum(evals, 0.0)), 0.0
+        )
+        frequencies: list[float] = [round(float(f), 6) for f in freq_arr]
 
-        # Per-residue B-factors: B_i = (8π²/3) * sum_k (1/λ_k) * |v_ik|²
-        bfactors = np.zeros(n_res)
-        for k in range(min(n_modes, len(evals))):
-            if evals[k] > 1e-10:
-                mode = evecs[:, k].reshape(n_res, 3)
-                mode_sq = np.sum(mode ** 2, axis=1)
-                bfactors += mode_sq / evals[k]
-        bfactors *= (8.0 * np.pi ** 2 / 3.0)
+        # Per-residue B-factors: B_i = (8 pi^2 / 3) * sum_k |v_ik|^2 / lambda_k
+        # Reshape eigenvectors to (n_res, 3, n_modes_actual)
+        evecs_reshaped: np.ndarray = evecs.reshape(n_res, 3, n_actual)
+        mode_sq: np.ndarray = np.sum(evecs_reshaped ** 2, axis=1)  # (n_res, n_actual)
 
-        # Normalize B-factors
-        if bfactors.max() > 0:
-            bfactors_norm = bfactors / bfactors.max()
-        else:
-            bfactors_norm = bfactors
+        # Inverse eigenvalues (mask near-zero modes)
+        valid_mask: np.ndarray = evals > 1e-10
+        inv_evals: np.ndarray = np.where(valid_mask, 1.0 / np.where(valid_mask, evals, 1.0), 0.0)
 
-        # Mode shapes: per-residue displacement magnitude for each mode
-        mode_shapes = []
-        for k in range(min(n_modes, len(evals))):
-            mode = evecs[:, k].reshape(n_res, 3)
-            magnitudes = np.sqrt(np.sum(mode ** 2, axis=1))
-            mode_shapes.append([round(float(m), 4) for m in magnitudes])
+        bfactors: np.ndarray = (8.0 * np.pi ** 2 / 3.0) * (mode_sq @ inv_evals)
+        bfactors_norm: np.ndarray = (
+            bfactors / bfactors.max() if bfactors.max() > 0 else bfactors
+        )
 
-        # Collectivity: κ = (1/N) * exp(-sum p_i ln p_i)
-        collectivity = []
-        for k in range(min(n_modes, len(evals))):
-            mode = evecs[:, k].reshape(n_res, 3)
-            sq = np.sum(mode ** 2, axis=1)
-            sq_sum = sq.sum()
+        # Mode shapes: per-residue displacement magnitude (vectorised)
+        mode_magnitudes: np.ndarray = np.sqrt(mode_sq)  # (n_res, n_actual)
+        mode_shapes: list[list[float]] = [
+            [round(float(m), 4) for m in mode_magnitudes[:, k]]
+            for k in range(min(5, n_actual))
+        ]
+
+        # Collectivity: kappa = (1/N) * exp(-sum p_i ln p_i)
+        collectivity: list[float] = []
+        for k in range(n_actual):
+            sq = mode_sq[:, k]
+            sq_sum: float = float(sq.sum())
             if sq_sum > 0:
                 p = sq / sq_sum
-                p = p[p > 1e-15]
-                entropy = -np.sum(p * np.log(p))
-                kappa = np.exp(entropy) / n_res
-                collectivity.append(round(float(kappa), 4))
+                p_safe = p[p > 1e-15]
+                entropy = -float(np.sum(p_safe * np.log(p_safe)))
+                kappa = float(np.exp(entropy)) / n_res
+                collectivity.append(round(kappa, 4))
             else:
                 collectivity.append(0.0)
+
+        logger.info(
+            "NMA (ANM) computed: %d modes, cutoff=%.1f A, "
+            "lowest freq=%.6f",
+            n_actual,
+            cutoff,
+            frequencies[0] if frequencies else 0.0,
+        )
 
         return {
             "resids": resids,
@@ -101,36 +138,83 @@ def compute_nma(universe, n_modes=10, cutoff=15.0, gamma=1.0, **kwargs):
             "frequencies": frequencies,
             "bfactors": [round(float(x), 4) for x in bfactors_norm],
             "mode_collectivity": collectivity,
-            "mode_shapes": mode_shapes[:5],  # first 5 modes
-            "n_modes_computed": int(min(n_modes, len(evals))),
+            "mode_shapes": mode_shapes,
+            "n_modes_computed": n_actual,
         }
 
     except Exception as e:
+        logger.exception("NMA computation failed")
         return {"error": str(e)}
 
 
-def _build_anm_hessian(coords, cutoff, gamma):
-    """Build the 3Nx3N Hessian matrix for an ANM."""
-    n = len(coords)
-    hessian = np.zeros((3 * n, 3 * n))
+# ------------------------------------------------------------------ #
+#  Internal helpers                                                    #
+# ------------------------------------------------------------------ #
 
-    for i in range(n):
-        for j in range(i + 1, n):
-            diff = coords[j] - coords[i]
-            dist = np.linalg.norm(diff)
-            if dist < cutoff:
-                # Spring constant scaled by distance
-                k_ij = -gamma / (dist ** 2)
-                # 3x3 super-element
-                outer = np.outer(diff, diff)
-                h_ij = k_ij * outer
 
-                # Off-diagonal blocks
-                hessian[3*i:3*i+3, 3*j:3*j+3] = h_ij
-                hessian[3*j:3*j+3, 3*i:3*i+3] = h_ij
+def _build_anm_hessian_vectorised(
+    coords: np.ndarray,
+    cutoff: float,
+    gamma: float,
+) -> np.ndarray:
+    """Build the 3N x 3N ANM Hessian using vectorised numpy operations.
 
-                # Diagonal blocks
-                hessian[3*i:3*i+3, 3*i:3*i+3] -= h_ij
-                hessian[3*j:3*j+3, 3*j:3*j+3] -= h_ij
+    The off-diagonal 3 x 3 super-elements are computed via broadcasting
+    and the diagonal blocks are obtained as the negative row-block sums,
+    avoiding a separate O(N^2) Python loop.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        Shape ``(N, 3)`` -- C-alpha coordinates.
+    cutoff : float
+        Distance cutoff in the same length unit as *coords*.
+    gamma : float
+        Uniform spring constant.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(3N, 3N)`` symmetric Hessian matrix.
+    """
+    n: int = len(coords)
+
+    # Pairwise difference vectors: diff[i,j] = coords[j] - coords[i]
+    diff: np.ndarray = coords[np.newaxis, :, :] - coords[:, np.newaxis, :]  # (n, n, 3)
+
+    # Squared distances
+    dist_sq: np.ndarray = np.sum(diff ** 2, axis=2)  # (n, n)
+
+    # Contact mask (within cutoff, excluding self-pairs)
+    mask: np.ndarray = (dist_sq < cutoff ** 2) & (dist_sq > 0)
+
+    # Spring constants: k_ij = -gamma / dist^2  (only where mask is True)
+    dist_sq_safe: np.ndarray = np.where(dist_sq > 0, dist_sq, 1.0)
+    k_values: np.ndarray = np.where(mask, -gamma / dist_sq_safe, 0.0)  # (n, n)
+
+    # 3x3 super-elements for all pairs:
+    # H_ij[a,b] = k_values[i,j] * diff[i,j,a] * diff[i,j,b]
+    super_elements: np.ndarray = (
+        k_values[:, :, np.newaxis, np.newaxis]
+        * diff[:, :, :, np.newaxis]
+        * diff[:, :, np.newaxis, :]
+    )  # (n, n, 3, 3)
+
+    # Assemble off-diagonal part of the Hessian by reshaping
+    # (n, n, 3, 3) -> (n, 3, n, 3) -> (3n, 3n)
+    hessian: np.ndarray = super_elements.transpose(0, 2, 1, 3).reshape(
+        3 * n, 3 * n
+    )
+
+    # Diagonal blocks = -sum of all off-diagonal blocks in the same row
+    # super_elements[i, i, :, :] is zero (self-pair excluded by mask),
+    # so summing over axis 1 gives the sum of off-diagonal blocks.
+    diag_blocks: np.ndarray = -super_elements.sum(axis=1)  # (n, 3, 3)
+
+    # Place diagonal blocks using vectorised fancy indexing
+    idx: np.ndarray = np.arange(n)
+    for a in range(3):
+        for b in range(3):
+            hessian[3 * idx + a, 3 * idx + b] = diag_blocks[:, a, b]
 
     return hessian

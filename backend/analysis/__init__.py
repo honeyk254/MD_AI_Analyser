@@ -19,6 +19,7 @@ from .nma import compute_nma
 from .entropy import compute_entropy
 from .convergence import compute_convergence
 from .binding_kinetics import compute_binding_kinetics
+from .trajectory_comparison import compare_trajectories
 
 __all__ = [
     "compute_rmsd", "compute_rmsf", "compute_rg",
@@ -30,4 +31,5 @@ __all__ = [
     "compute_energy_decomposition", "compute_prs",
     "compute_nma", "compute_entropy",
     "compute_convergence", "compute_binding_kinetics",
+    "compare_trajectories",
 ]

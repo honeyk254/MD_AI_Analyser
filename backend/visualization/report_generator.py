@@ -1,27 +1,53 @@
+from __future__ import annotations
+
 """
-Report generator — creates HTML, CSV, and PDF reports from analysis results.
+Report generator -- creates HTML, CSV, and PDF reports from analysis results.
+
+Provides three export formats:
+
+* :func:`generate_html_report` -- standalone HTML with embedded Plotly charts
+* :func:`export_csv` -- flat CSV of all scalar and time-series metrics
+* :func:`export_pdf` -- multi-page PDF with rendered plot images
 """
-import json
+
 import csv
+import json
+import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
 import numpy as np
 
+logger = logging.getLogger("md_ai_analyzer")
 
-def generate_html_report(result, output_dir: Path) -> Path:
-    """Generate a standalone HTML report with embedded Plotly charts."""
+
+def generate_html_report(result: Any, output_dir: Path) -> Path:
+    """Generate a standalone HTML report with embedded Plotly charts.
+
+    Parameters
+    ----------
+    result : AnalysisResult
+        Completed analysis result object.
+    output_dir : Path
+        Directory in which to write ``analysis_report.html``.
+
+    Returns
+    -------
+    Path
+        Absolute path to the generated HTML file.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    report_path = output_dir / "analysis_report.html"
+    report_path: Path = output_dir / "analysis_report.html"
 
     # Build report sections
-    info = result.trajectory_info or {}
-    insights = result.biological_insights or []
-    plots = result.plots or {}
+    info: dict[str, Any] = result.trajectory_info or {}
+    insights: list[dict[str, Any]] = result.biological_insights or []
+    plots: dict[str, str] = result.plots or {}
 
     # Generate plot divs
-    plot_html_sections = []
-    plot_names_map = {
+    plot_html_sections: list[str] = []
+    plot_names_map: dict[str, str] = {
         "rmsd_plot": "RMSD Over Time",
         "rmsf_plot": "Per-Residue RMSF",
         "rg_plot": "Radius of Gyration",
@@ -58,9 +84,9 @@ def generate_html_report(result, output_dir: Path) -> Path:
     }
 
     for plot_key, plot_title in plot_names_map.items():
-        json_str = plots.get(plot_key, "")
+        json_str: str = plots.get(plot_key, "")
         if json_str:
-            div_id = plot_key.replace("_", "-")
+            div_id: str = plot_key.replace("_", "-")
             plot_html_sections.append(f"""
             <div class="plot-section">
                 <h3>{plot_title}</h3>
@@ -72,8 +98,8 @@ def generate_html_report(result, output_dir: Path) -> Path:
             """)
 
     # Insights HTML
-    insight_cards = []
-    category_colors = {
+    insight_cards: list[str] = []
+    category_colors: dict[str, str] = {
         "structural": "#4ecdc4",
         "dynamic": "#a29bfe",
         "allosteric": "#ff6b6b",
@@ -81,11 +107,11 @@ def generate_html_report(result, output_dir: Path) -> Path:
         "transition": "#fd79a8",
     }
     for ins in insights:
-        color = category_colors.get(ins.get("category", ""), "#00d4ff")
-        confidence = ins.get("confidence", 0)
-        conf_bar = int(confidence * 100)
+        color: str = category_colors.get(ins.get("category", ""), "#00d4ff")
+        confidence: float = ins.get("confidence", 0)
+        conf_bar: int = int(confidence * 100)
 
-        evidence_html = ""
+        evidence_html: str = ""
         for ev in ins.get("evidence", []):
             evidence_html += f"<li>{ev}</li>"
 
@@ -102,7 +128,7 @@ def generate_html_report(result, output_dir: Path) -> Path:
         </div>
         """)
 
-    html = f"""<!DOCTYPE html>
+    html: str = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -139,9 +165,9 @@ def generate_html_report(result, output_dir: Path) -> Path:
 </head>
 <body>
     <div class="container">
-        <h1>🧬 MD AI Analysis Report</h1>
+        <h1>MD AI Analysis Report</h1>
 
-        <h2>📊 Trajectory Statistics</h2>
+        <h2>Trajectory Statistics</h2>
         <div class="info-grid">
             <div class="info-card">
                 <div class="value">{info.get('n_frames', 'N/A')}</div>
@@ -161,10 +187,10 @@ def generate_html_report(result, output_dir: Path) -> Path:
             </div>
         </div>
 
-        <h2>🧠 AI-Generated Biological Insights</h2>
+        <h2>AI-Generated Biological Insights</h2>
         {''.join(insight_cards) if insight_cards else '<p>No insights generated.</p>'}
 
-        <h2>📈 Analysis Plots</h2>
+        <h2>Analysis Plots</h2>
         {''.join(plot_html_sections) if plot_html_sections else '<p>No plots generated.</p>'}
 
         <footer style="text-align: center; color: #666; margin-top: 40px; padding: 20px; border-top: 1px solid #1a1a3e;">
@@ -175,81 +201,105 @@ def generate_html_report(result, output_dir: Path) -> Path:
 </html>"""
 
     report_path.write_text(html, encoding="utf-8")
+    logger.info("HTML report written to %s", report_path)
     return report_path
 
 
-def export_csv(result, output_dir: Path) -> Path:
-    """Export ALL analysis metrics to CSV (item 61 — complete CSV)."""
+def export_csv(result: Any, output_dir: Path) -> Path:
+    """Export all analysis metrics to a flat CSV file.
+
+    Rows cover RMSD, RMSF, Rg, SASA, H-bonds, salt bridges, secondary
+    structure fractions, entropy, energy decomposition, NMA B-factors,
+    PRS scores, water bridges, tICA timescales, dynamic network stability,
+    interaction fingerprints, VAE metrics, PCA variance, convergence,
+    clustering, MSM, GNN importance, allosteric hubs, and binding kinetics.
+
+    Parameters
+    ----------
+    result : AnalysisResult
+        Completed analysis result object.
+    output_dir : Path
+        Directory in which to write ``metrics.csv``.
+
+    Returns
+    -------
+    Path
+        Absolute path to the generated CSV file.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = output_dir / "metrics.csv"
+    csv_path: Path = output_dir / "metrics.csv"
 
-    rows = []
+    rows: list[dict[str, Any]] = []
 
     # RMSD
-    rmsd = result.rmsd
+    rmsd: Any = result.rmsd
     if isinstance(rmsd, dict) and "rmsd" in rmsd:
         for t, v in zip(rmsd.get("time", []), rmsd["rmsd"]):
-            rows.append({"metric": "RMSD", "time": t, "value": v, "unit": "Å"})
+            rows.append({"metric": "RMSD", "time": t, "value": v, "unit": "\u00c5"})
 
     # RMSF
-    rmsf = result.rmsf
+    rmsf: Any = result.rmsf
     if isinstance(rmsf, dict) and "rmsf" in rmsf:
         for r, v in zip(rmsf.get("resids", []), rmsf["rmsf"]):
-            rows.append({"metric": "RMSF", "residue": r, "value": v, "unit": "Å"})
+            rows.append({"metric": "RMSF", "residue": r, "value": v, "unit": "\u00c5"})
 
     # Rg
-    rg = result.rg
+    rg: Any = result.rg
     if isinstance(rg, dict) and "rg" in rg:
         for t, v in zip(rg.get("time", []), rg["rg"]):
-            rows.append({"metric": "Rg", "time": t, "value": v, "unit": "Å"})
+            rows.append({"metric": "Rg", "time": t, "value": v, "unit": "\u00c5"})
 
     # SASA
-    sasa = result.sasa
+    sasa: Any = result.sasa
     if isinstance(sasa, dict) and "total_sasa" in sasa:
         for t, v in zip(sasa.get("time", []), sasa["total_sasa"]):
-            rows.append({"metric": "SASA_total", "time": t, "value": v, "unit": "Å²"})
+            rows.append({"metric": "SASA_total", "time": t, "value": v, "unit": "\u00c5\u00b2"})
 
     # H-bonds
-    hbonds = result.hbonds
+    hbonds: Any = result.hbonds
     if isinstance(hbonds, dict) and "n_hbonds" in hbonds:
-        times_hb = hbonds.get("time", list(range(len(hbonds["n_hbonds"]))))
+        times_hb: list[Any] = hbonds.get("time", list(range(len(hbonds["n_hbonds"]))))
         for t, v in zip(times_hb, hbonds["n_hbonds"]):
             rows.append({"metric": "HBonds_count", "time": t, "value": v, "unit": "count"})
 
     # Salt bridges
-    sb = result.salt_bridges
+    sb: Any = result.salt_bridges
     if isinstance(sb, dict) and "total_unique_pairs" in sb:
         rows.append({"metric": "SaltBridges_unique_pairs", "value": sb["total_unique_pairs"], "unit": "count"})
     if isinstance(sb, dict) and "mean_salt_bridges" in sb:
         rows.append({"metric": "SaltBridges_mean_per_frame", "value": sb["mean_salt_bridges"], "unit": "count"})
 
     # Secondary structure fractions
-    ss = result.secondary_structure
+    ss: Any = result.secondary_structure
     if isinstance(ss, dict):
-        for key, mean_key in [("helix_fraction", "mean_helix"), ("sheet_fraction", "mean_sheet"), ("coil_fraction", "mean_coil")]:
+        for key, mean_key in [
+            ("helix_fraction", "mean_helix"),
+            ("sheet_fraction", "mean_sheet"),
+            ("coil_fraction", "mean_coil"),
+        ]:
             if mean_key in ss:
                 rows.append({"metric": f"SS_{key}", "value": ss[mean_key], "unit": "fraction"})
 
     # Entropy
-    ent = result.entropy
+    ent: Any = result.entropy
     if isinstance(ent, dict) and "total_entropy_kJ_mol_K" in ent:
         rows.append({"metric": "Entropy_total", "value": ent["total_entropy_kJ_mol_K"], "unit": "kJ/mol/K"})
 
     # Energy decomposition
-    energy = result.energy_decomposition
+    energy: Any = result.energy_decomposition
     if isinstance(energy, dict) and "total_energy" in energy:
         for r, v in zip(energy.get("resids", []), energy["total_energy"]):
             rows.append({"metric": "Energy_per_residue", "residue": r, "value": v, "unit": "kJ/mol"})
 
     # NMA B-factors
-    nma = result.nma
+    nma: Any = result.nma
     if isinstance(nma, dict) and "bfactors" in nma:
         for r, v in zip(nma.get("resids", []), nma["bfactors"]):
             rows.append({"metric": "NMA_bfactor", "residue": r, "value": v, "unit": "norm"})
 
     # PRS effector/sensor scores
-    prs = result.prs
+    prs: Any = result.prs
     if isinstance(prs, dict) and "effector_scores" in prs:
         for r, v in zip(prs.get("resids", []), prs["effector_scores"]):
             rows.append({"metric": "PRS_effector", "residue": r, "value": v, "unit": "score"})
@@ -257,109 +307,141 @@ def export_csv(result, output_dir: Path) -> Path:
             rows.append({"metric": "PRS_sensor", "residue": r, "value": v, "unit": "score"})
 
     # Water bridges
-    wb = result.water_bridges
+    wb: Any = result.water_bridges
     if isinstance(wb, dict) and "bridges" in wb:
         for b in wb["bridges"]:
-            rows.append({"metric": "WaterBridge", "residue": f"{b['resid_1']}-{b['resid_2']}", "value": b["occupancy"], "unit": "fraction"})
+            rows.append({
+                "metric": "WaterBridge",
+                "residue": f"{b['resid_1']}-{b['resid_2']}",
+                "value": b["occupancy"],
+                "unit": "fraction",
+            })
 
     # tICA timescales
-    tica = result.tica
+    tica: Any = result.tica
     if isinstance(tica, dict) and "timescales" in tica:
         for i, ts in enumerate(tica["timescales"]):
-            if ts != float('inf'):
-                rows.append({"metric": f"tICA_timescale_tIC{i+1}", "value": ts, "unit": "frames"})
+            if ts != float("inf"):
+                rows.append({"metric": f"tICA_timescale_tIC{i + 1}", "value": ts, "unit": "frames"})
 
     # Dynamic network community stability
-    dn = result.dynamic_network
+    dn: Any = result.dynamic_network
     if isinstance(dn, dict) and "community_stability" in dn:
         for r, v in zip(dn.get("resids", []), dn["community_stability"]):
             rows.append({"metric": "DynNetwork_stability", "residue": r, "value": v, "unit": "fraction"})
 
     # Interaction fingerprints consensus
-    ifp = result.interaction_fingerprints
+    ifp: Any = result.interaction_fingerprints
     if isinstance(ifp, dict) and "consensus_fingerprint" in ifp:
         for r, v in zip(ifp.get("resids", []), ifp["consensus_fingerprint"]):
             rows.append({"metric": "IFP_consensus", "residue": r, "value": v, "unit": "score"})
 
     # VAE reconstruction error
-    vae = result.vae
+    vae: Any = result.vae
     if isinstance(vae, dict) and "reconstruction_error" in vae:
         rows.append({"metric": "VAE_recon_error", "value": vae["reconstruction_error"], "unit": "MSE"})
         for i, v in enumerate(vae.get("latent_variance", [])):
-            rows.append({"metric": f"VAE_latent_var_dim{i+1}", "value": v, "unit": "variance"})
+            rows.append({"metric": f"VAE_latent_var_dim{i + 1}", "value": v, "unit": "variance"})
 
     # PCA explained variance
-    pca = result.pca
+    pca: Any = result.pca
     if isinstance(pca, dict) and "explained_variance" in pca:
         for i, v in enumerate(pca["explained_variance"]):
-            rows.append({"metric": f"PCA_variance_PC{i+1}", "value": v, "unit": "fraction"})
+            rows.append({"metric": f"PCA_variance_PC{i + 1}", "value": v, "unit": "fraction"})
 
     # Convergence
-    conv = result.convergence
+    conv: Any = result.convergence
     if isinstance(conv, dict) and "convergence_score" in conv:
         rows.append({"metric": "Convergence_score", "value": conv["convergence_score"], "unit": "0-1"})
         if "rmsd_drift" in conv:
             rows.append({"metric": "Convergence_RMSD_drift", "value": conv["rmsd_drift"], "unit": "fraction"})
 
     # Clustering
-    clust = result.clustering
+    clust: Any = result.clustering
     if isinstance(clust, dict) and "n_clusters" in clust:
         rows.append({"metric": "Clustering_n_clusters", "value": clust["n_clusters"], "unit": "count"})
 
     # MSM
-    msm = result.msm
+    msm: Any = result.msm
     if isinstance(msm, dict) and "n_states" in msm:
         rows.append({"metric": "MSM_n_states", "value": msm["n_states"], "unit": "count"})
 
     # GNN importance
-    gnn = result.gnn_results
+    gnn: Any = result.gnn_results
     if isinstance(gnn, dict) and "importance_scores" in gnn:
-        resids_gnn = gnn.get("resids", list(range(len(gnn["importance_scores"]))))
+        resids_gnn: list[Any] = gnn.get("resids", list(range(len(gnn["importance_scores"]))))
         for r, v in zip(resids_gnn, gnn["importance_scores"]):
             rows.append({"metric": "GNN_importance", "residue": r, "value": v, "unit": "score"})
 
     # Allosteric hub scores
-    allo = result.allosteric
+    allo: Any = result.allosteric
     if isinstance(allo, dict) and "hub_residues" in allo:
         for h in allo["hub_residues"]:
             rows.append({"metric": "Allosteric_hub", "residue": h.get("resid"), "value": h.get("score", 0), "unit": "score"})
 
     # Binding kinetics summary
-    bk = result.binding_kinetics
+    bk: Any = result.binding_kinetics
     if isinstance(bk, dict) and "kon_estimate_per_ps" in bk:
         rows.append({"metric": "BindingKinetics_kon", "value": bk["kon_estimate_per_ps"], "unit": "1/ps"})
         rows.append({"metric": "BindingKinetics_koff", "value": bk["koff_estimate_per_ps"], "unit": "1/ps"})
-        rows.append({"metric": "BindingKinetics_residence_continuous", "value": bk.get("residence_time_continuous_ps", 0), "unit": "ps"})
+        rows.append({
+            "metric": "BindingKinetics_residence_continuous",
+            "value": bk.get("residence_time_continuous_ps", 0),
+            "unit": "ps",
+        })
 
-    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
         if rows:
             writer = csv.DictWriter(f, fieldnames=["metric", "time", "residue", "value", "unit"])
             writer.writeheader()
             writer.writerows(rows)
 
+    logger.info("CSV metrics written to %s (%d rows)", csv_path, len(rows))
     return csv_path
 
 
-def export_pdf(result, output_dir: Path) -> Path:
-    """Export analysis report as PDF using kaleido (item 60)."""
+def export_pdf(result: Any, output_dir: Path) -> Path:
+    """Export analysis report as a multi-page PDF.
+
+    Renders each Plotly chart to a PNG image via *kaleido* and assembles
+    them into a PDF using *fpdf2*.
+
+    Parameters
+    ----------
+    result : AnalysisResult
+        Completed analysis result object.
+    output_dir : Path
+        Directory in which to write ``analysis_report.pdf``.
+
+    Returns
+    -------
+    Path
+        Absolute path to the generated PDF file.
+
+    Raises
+    ------
+    RuntimeError
+        If *plotly* is not installed, no plots are available, or *fpdf2*
+        is not installed.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    pdf_path = output_dir / "analysis_report.pdf"
+    pdf_path: Path = output_dir / "analysis_report.pdf"
 
     try:
         import plotly.graph_objects as go
-        from plotly.subplots import make_subplots
+        from plotly.subplots import make_subplots  # noqa: F401
         import plotly.io as pio
     except ImportError:
         raise RuntimeError("plotly required for PDF export")
 
-    plots = result.plots or {}
-    info = result.trajectory_info or {}
-    insights = result.biological_insights or []
+    plots: dict[str, str] = result.plots or {}
+    info: dict[str, Any] = result.trajectory_info or {}
+    insights: list[dict[str, Any]] = result.biological_insights or []
 
-    # Collect all plot figures
-    figs = []
-    plot_order = [
+    # Collect all plot figures in presentation order
+    figs: list[go.Figure] = []
+    plot_order: list[str] = [
         "rmsd_plot", "rmsf_plot", "rg_plot", "ss_plot", "hbond_plot",
         "contact_map", "pca_plot", "dccm_plot", "fel_plot", "clustering_plot",
         "sasa_plot", "dimensionality_plot", "dimensionality_3d_plot",
@@ -370,7 +452,7 @@ def export_pdf(result, output_dir: Path) -> Path:
     ]
 
     for plot_key in plot_order:
-        json_str = plots.get(plot_key, "")
+        json_str: str = plots.get(plot_key, "")
         if json_str:
             try:
                 fig_dict = json.loads(json_str)
@@ -382,12 +464,11 @@ def export_pdf(result, output_dir: Path) -> Path:
     if not figs:
         raise RuntimeError("No plots available for PDF export")
 
-    # Write each plot as a page-sized image and combine into a single PDF
-    # Using kaleido for static image export
-    images = []
+    # Render each figure to a PNG image
+    images: list[bytes] = []
     for fig in figs:
         try:
-            img_bytes = pio.to_image(fig, format="png", width=1000, height=600, scale=2)
+            img_bytes: bytes = pio.to_image(fig, format="png", width=1000, height=600, scale=2)
             images.append(img_bytes)
         except Exception:
             continue
@@ -395,48 +476,74 @@ def export_pdf(result, output_dir: Path) -> Path:
     if not images:
         raise RuntimeError("Could not render any plots to images")
 
-    # Build a simple HTML-to-PDF approach: write images into an HTML file,
-    # then use a basic image-only PDF
     _write_image_pdf(images, info, insights, pdf_path)
-
+    logger.info("PDF report written to %s (%d pages)", pdf_path, len(images) + 1)
     return pdf_path
 
 
-def _write_image_pdf(images: list, info: dict, insights: list, pdf_path: Path):
-    """Write a simple PDF from rendered plot images."""
+def _write_image_pdf(
+    images: list[bytes],
+    info: dict[str, Any],
+    insights: list[dict[str, Any]],
+    pdf_path: Path,
+) -> None:
+    """Assemble rendered plot images into a multi-page PDF.
+
+    Uses *fpdf2* for native PDF generation.  Falls back to writing a
+    print-friendly HTML file if *fpdf2* is not available.
+
+    Parameters
+    ----------
+    images : list[bytes]
+        PNG image bytes for each plot page.
+    info : dict
+        Trajectory metadata (``n_frames``, ``n_atoms``, etc.).
+    insights : list[dict]
+        AI-generated biological insight dicts.
+    pdf_path : Path
+        Target file path for the PDF output.
+
+    Raises
+    ------
+    RuntimeError
+        If *fpdf2* is not installed.
+    """
     try:
-        # Try using fpdf2 if available
         from fpdf import FPDF
         import tempfile
         import os
 
-        pdf = FPDF(orientation='L', unit='mm', format='A4')
+        pdf = FPDF(orientation="L", unit="mm", format="A4")
         pdf.set_auto_page_break(auto=False)
 
         # Title page
         pdf.add_page()
-        pdf.set_font('Helvetica', 'B', 24)
-        pdf.cell(0, 40, 'MD AI Analysis Report', ln=True, align='C')
-        pdf.set_font('Helvetica', '', 14)
-        pdf.cell(0, 10, f"Frames: {info.get('n_frames', 'N/A')}  |  "
-                        f"Atoms: {info.get('n_atoms', 'N/A')}  |  "
-                        f"Residues: {info.get('n_residues', 'N/A')}", ln=True, align='C')
+        pdf.set_font("Helvetica", "B", 24)
+        pdf.cell(0, 40, "MD AI Analysis Report", ln=True, align="C")
+        pdf.set_font("Helvetica", "", 14)
+        pdf.cell(
+            0, 10,
+            f"Frames: {info.get('n_frames', 'N/A')}  |  "
+            f"Atoms: {info.get('n_atoms', 'N/A')}  |  "
+            f"Residues: {info.get('n_residues', 'N/A')}",
+            ln=True, align="C",
+        )
 
         if insights:
             pdf.ln(10)
-            pdf.set_font('Helvetica', 'B', 16)
-            pdf.cell(0, 10, 'Key Insights:', ln=True)
-            pdf.set_font('Helvetica', '', 11)
+            pdf.set_font("Helvetica", "B", 16)
+            pdf.cell(0, 10, "Key Insights:", ln=True)
+            pdf.set_font("Helvetica", "", 11)
             for ins in insights[:10]:
-                text = f"[{ins.get('category', '')}] {ins.get('description', '')}"
+                text: str = f"[{ins.get('category', '')}] {ins.get('description', '')}"
                 pdf.multi_cell(0, 6, text)
                 pdf.ln(2)
 
         # Plot pages
-        tmp_files = []
+        tmp_files: list[str] = []
         for i, img_bytes in enumerate(images):
-            tmp_path = os.path.join(tempfile.gettempdir(), f"md_plot_{i}.png")
-            with open(tmp_path, 'wb') as f:
+            tmp_path: str = os.path.join(tempfile.gettempdir(), f"md_plot_{i}.png")
+            with open(tmp_path, "wb") as f:
                 f.write(img_bytes)
             tmp_files.append(tmp_path)
 
@@ -454,12 +561,13 @@ def _write_image_pdf(images: list, info: dict, insights: list, pdf_path: Path):
 
     except ImportError:
         # Fallback: write a basic HTML file and note that fpdf2 is needed
-        # Save plot images as standalone HTML with print-friendly CSS
-        html_content = """<!DOCTYPE html><html><head><title>MD Report PDF</title>
-        <style>@media print { img { page-break-after: always; max-width: 100%; } }</style>
-        </head><body>
-        <h1>MD AI Analysis Report</h1>
-        <p>Install fpdf2 for native PDF: pip install fpdf2</p>
-        </body></html>"""
-        pdf_path.with_suffix('.html').write_text(html_content, encoding='utf-8')
+        html_content: str = (
+            "<!DOCTYPE html><html><head><title>MD Report PDF</title>"
+            "<style>@media print { img { page-break-after: always; max-width: 100%; } }</style>"
+            "</head><body>"
+            "<h1>MD AI Analysis Report</h1>"
+            "<p>Install fpdf2 for native PDF: pip install fpdf2</p>"
+            "</body></html>"
+        )
+        pdf_path.with_suffix(".html").write_text(html_content, encoding="utf-8")
         raise RuntimeError("fpdf2 not installed. Install with: pip install fpdf2")

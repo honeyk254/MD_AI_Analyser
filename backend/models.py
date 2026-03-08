@@ -1,30 +1,54 @@
 """
-Pydantic models for API request/response schemas.
+Pydantic models for API request/response schemas and internal data structures.
+
+Changes from original:
+- Added ``from __future__ import annotations`` for forward-reference support.
+- Added ``model_config`` with ``arbitrary_types_allowed`` for MDAnalysis compat.
+- Added ``msm_lag_time`` validator.
+- Improved docstrings.
 """
-from pydantic import BaseModel, field_validator
-from typing import Optional, Dict, List, Any
+from __future__ import annotations
+
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, field_validator
 
 
 class AnalysisStatus(str, Enum):
+    """Lifecycle states for an analysis job."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
 
 
+# ── API schemas ─────────────────────────────────────────────
+
+
 class UploadResponse(BaseModel):
+    """Response returned after a successful file upload."""
+
     job_id: str
     message: str
     files: Dict[str, str]
 
 
 class ErrorResponse(BaseModel):
+    """Standard error envelope."""
+
     detail: str
     error_code: Optional[str] = None
 
 
 class AnalysisRequest(BaseModel):
+    """Parameters controlling the analysis pipeline.
+
+    Every field carries a sane default so that the frontend only needs to
+    send ``job_id`` plus any overrides.
+    """
+
     job_id: str
     stride: int = 1
     run_gnn: bool = True
@@ -44,6 +68,8 @@ class AnalysisRequest(BaseModel):
     correlation_threshold: float = 0.5
     vae_latent_dim: int = 2
 
+    # ── Validators ──────────────────────────────────────────
+
     @field_validator("stride")
     @classmethod
     def stride_positive(cls, v: int) -> int:
@@ -55,21 +81,21 @@ class AnalysisRequest(BaseModel):
     @classmethod
     def hbond_cutoff_range(cls, v: float) -> float:
         if not 2.0 <= v <= 5.0:
-            raise ValueError("hbond_cutoff must be between 2.0 and 5.0 Å")
+            raise ValueError("hbond_cutoff must be between 2.0 and 5.0 A")
         return v
 
     @field_validator("contact_cutoff")
     @classmethod
     def contact_cutoff_range(cls, v: float) -> float:
         if not 3.0 <= v <= 15.0:
-            raise ValueError("contact_cutoff must be between 3.0 and 15.0 Å")
+            raise ValueError("contact_cutoff must be between 3.0 and 15.0 A")
         return v
 
     @field_validator("salt_bridge_cutoff")
     @classmethod
     def salt_bridge_cutoff_range(cls, v: float) -> float:
         if not 2.0 <= v <= 8.0:
-            raise ValueError("salt_bridge_cutoff must be between 2.0 and 8.0 Å")
+            raise ValueError("salt_bridge_cutoff must be between 2.0 and 8.0 A")
         return v
 
     @field_validator("temperature")
@@ -100,8 +126,17 @@ class AnalysisRequest(BaseModel):
             raise ValueError("correlation_threshold must be between 0 and 1")
         return v
 
+    @field_validator("msm_lag_time")
+    @classmethod
+    def msm_lag_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("msm_lag_time must be >= 1")
+        return v
+
 
 class ProgressUpdate(BaseModel):
+    """Schema for SSE progress events."""
+
     job_id: str
     status: AnalysisStatus
     current_module: str
@@ -110,18 +145,36 @@ class ProgressUpdate(BaseModel):
 
 
 class InsightItem(BaseModel):
+    """A single biological insight produced by the inference engine."""
+
     type: str
     residues: List[int]
     description: str
     confidence: float
     evidence: List[str]
-    category: str  # structural, dynamic, allosteric, binding, transition
+    category: str  # structural | dynamic | allosteric | binding | transition
+
+
+# ── Internal result container ───────────────────────────────
 
 
 class AnalysisResult(BaseModel):
+    """Aggregated output of the full analysis pipeline.
+
+    Every analysis module stores its results as a ``Dict[str, Any]``
+    keyed by the module attribute name.  Modules that were skipped or
+    errored carry ``{"error": "..."}`` or remain as empty dicts.
+    """
+
+    model_config = {"arbitrary_types_allowed": True}
+
     job_id: str
     status: AnalysisStatus
+
+    # Trajectory metadata
     trajectory_info: Dict[str, Any] = {}
+
+    # Classical analysis modules
     rmsd: Dict[str, Any] = {}
     rmsf: Dict[str, Any] = {}
     rg: Dict[str, Any] = {}
@@ -135,24 +188,32 @@ class AnalysisResult(BaseModel):
     free_energy: Dict[str, Any] = {}
     sasa: Dict[str, Any] = {}
     tica: Dict[str, Any] = {}
+    water_bridges: Dict[str, Any] = {}
+    energy_decomposition: Dict[str, Any] = {}
+    prs: Dict[str, Any] = {}
+    nma: Dict[str, Any] = {}
+    entropy: Dict[str, Any] = {}
+    convergence: Dict[str, Any] = {}
+    binding_kinetics: Dict[str, Any] = {}
+
+    # ML modules
     ml_states: Dict[str, Any] = {}
     msm: Dict[str, Any] = {}
     allosteric: Dict[str, Any] = {}
     domains: Dict[str, Any] = {}
     ligand: Dict[str, Any] = {}
     dimensionality: Dict[str, Any] = {}
-    water_bridges: Dict[str, Any] = {}
-    energy_decomposition: Dict[str, Any] = {}
-    prs: Dict[str, Any] = {}
-    nma: Dict[str, Any] = {}
-    entropy: Dict[str, Any] = {}
     interaction_fingerprints: Dict[str, Any] = {}
     tunnels: Dict[str, Any] = {}
     vae: Dict[str, Any] = {}
     dynamic_network: Dict[str, Any] = {}
+
+    # Deep learning modules
     gnn_results: Dict[str, Any] = {}
     transformer_results: Dict[str, Any] = {}
-    convergence: Dict[str, Any] = {}
-    binding_kinetics: Dict[str, Any] = {}
+
+    # Biological interpretation
     biological_insights: List[Dict[str, Any]] = []
-    plots: Dict[str, str] = {}  # plot name -> JSON string of plotly figure
+
+    # Plotly JSON strings keyed by plot name
+    plots: Dict[str, str] = {}

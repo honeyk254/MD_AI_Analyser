@@ -1,5 +1,5 @@
 /**
- * MD AI Analyzer — Frontend Application
+ * MD AI Analyzer — Frontend Application v2
  * Handles file upload, analysis control, results rendering, and 3D viewer.
  */
 
@@ -14,8 +14,61 @@ let eventSource = null;
 document.addEventListener('DOMContentLoaded', async () => {
     initNavigation();
     initDragDrop();
+    initFileInputListeners();
+    injectProgressGradient();
     await checkSystemInfo();
 });
+
+// ===== Toast Notification System =====
+function showToast(message, type = 'info', duration = 4000) {
+    const container = document.getElementById('toast-container');
+
+    const icons = {
+        success: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>',
+        error: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+        info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+        warning: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `${icons[type] || icons.info}<span>${message}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('toast-exit');
+        toast.addEventListener('animationend', () => toast.remove());
+    }, duration);
+}
+
+// ===== SVG gradient for progress ring =====
+function injectProgressGradient() {
+    const svg = document.querySelector('.progress-ring');
+    if (!svg) return;
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+    gradient.setAttribute('id', 'progress-gradient');
+    gradient.setAttribute('x1', '0%');
+    gradient.setAttribute('y1', '0%');
+    gradient.setAttribute('x2', '100%');
+    gradient.setAttribute('y2', '100%');
+
+    const stops = [
+        { offset: '0%', color: '#00d4ff' },
+        { offset: '50%', color: '#a78bfa' },
+        { offset: '100%', color: '#f472b6' },
+    ];
+
+    stops.forEach(s => {
+        const stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop.setAttribute('offset', s.offset);
+        stop.setAttribute('stop-color', s.color);
+        gradient.appendChild(stop);
+    });
+
+    defs.appendChild(gradient);
+    svg.insertBefore(defs, svg.firstChild);
+}
 
 // ===== Navigation =====
 function initNavigation() {
@@ -49,12 +102,47 @@ async function checkSystemInfo() {
         const data = await resp.json();
         if (data.system?.gpu_available) {
             const badge = document.getElementById('gpu-badge');
-            badge.textContent = `GPU: ${data.system.gpu_name}`;
+            document.getElementById('gpu-badge-text').textContent = `GPU: ${data.system.gpu_name}`;
             badge.style.display = 'inline-flex';
         }
     } catch (e) {
         console.log('Health check failed:', e);
     }
+}
+
+// ===== File Input Listeners =====
+function initFileInputListeners() {
+    const fileInputs = [
+        { id: 'file-trajectory', statusId: 'status-trajectory', groupId: 'fg-trajectory' },
+        { id: 'file-topology', statusId: 'status-topology', groupId: 'fg-topology' },
+        { id: 'file-structure', statusId: 'status-structure', groupId: 'fg-structure' },
+        { id: 'file-reference', statusId: 'status-reference', groupId: 'fg-reference' },
+    ];
+
+    fileInputs.forEach(({ id, statusId, groupId }) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener('change', () => {
+            const status = document.getElementById(statusId);
+            const group = document.getElementById(groupId);
+            if (input.files.length > 0) {
+                const name = input.files[0].name;
+                const size = formatFileSize(input.files[0].size);
+                status.textContent = `${name} (${size})`;
+                group.classList.add('has-file');
+            } else {
+                status.textContent = '';
+                group.classList.remove('has-file');
+            }
+        });
+    });
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+    return (bytes / 1073741824).toFixed(2) + ' GB';
 }
 
 // ===== Drag & Drop =====
@@ -70,24 +158,27 @@ function initDragDrop() {
         const files = e.dataTransfer.files;
         for (const f of files) {
             const ext = f.name.split('.').pop().toLowerCase();
-            if (['xtc', 'trr'].includes(ext)) document.getElementById('file-trajectory').files = createFileList(f);
-            else if (ext === 'tpr') document.getElementById('file-topology').files = createFileList(f);
-            else if (['pdb', 'gro'].includes(ext)) document.getElementById('file-structure').files = createFileList(f);
+            if (['xtc', 'trr'].includes(ext)) assignFile('file-trajectory', f);
+            else if (ext === 'tpr') assignFile('file-topology', f);
+            else if (['pdb', 'gro'].includes(ext)) assignFile('file-structure', f);
         }
+        showToast('Files detected and assigned', 'success');
     });
 }
 
-function createFileList(file) {
+function assignFile(inputId, file) {
     const dt = new DataTransfer();
     dt.items.add(file);
-    return dt.files;
+    const input = document.getElementById(inputId);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change'));
 }
 
 // ===== Upload & Analyze =====
 async function uploadAndAnalyze() {
     const btn = document.getElementById('btn-upload');
     btn.disabled = true;
-    btn.textContent = '⏳ Uploading...';
+    btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px;margin:0;"></div> Uploading...';
 
     const formData = new FormData();
     const trajectory = document.getElementById('file-trajectory').files[0];
@@ -96,9 +187,9 @@ async function uploadAndAnalyze() {
     const reference = document.getElementById('file-reference').files[0];
 
     if (!structure) {
-        alert('Please provide at least a structure file (.pdb or .gro)');
+        showToast('Please provide at least a structure file (.pdb or .gro)', 'warning');
         btn.disabled = false;
-        btn.textContent = '🚀 Upload & Analyze';
+        btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg> Upload & Analyze';
         return;
     }
 
@@ -119,9 +210,10 @@ async function uploadAndAnalyze() {
 
         // Switch to progress
         switchSection('progress');
+        showToast('Files uploaded successfully', 'success');
         addLog('Files uploaded successfully');
 
-        // Start analysis — include configurable params
+        // Start analysis
         const startFrameVal = document.getElementById('opt-start-frame')?.value;
         const endFrameVal = document.getElementById('opt-end-frame')?.value;
 
@@ -150,16 +242,28 @@ async function uploadAndAnalyze() {
         });
 
         if (!analyzeResp.ok) throw new Error('Failed to start analysis');
+        showToast('Analysis pipeline started', 'info');
         addLog('Analysis pipeline started');
 
-        // Connect SSE
         connectSSE(currentJobId);
 
     } catch (e) {
-        alert('Error: ' + e.message);
+        showToast('Error: ' + e.message, 'error');
         btn.disabled = false;
-        btn.textContent = '🚀 Upload & Analyze';
+        btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg> Upload & Analyze';
     }
+}
+
+// ===== Progress Ring Update =====
+function updateProgressRing(pct) {
+    const circle = document.getElementById('progress-ring-fill');
+    const text = document.getElementById('progress-ring-text');
+    if (!circle || !text) return;
+
+    const circumference = 2 * Math.PI * 52; // r=52
+    const offset = circumference - (pct / 100) * circumference;
+    circle.style.strokeDashoffset = offset;
+    text.textContent = `${Math.round(pct)}%`;
 }
 
 // ===== SSE Progress =====
@@ -173,19 +277,21 @@ function connectSSE(jobId) {
 
         const pct = data.progress_percent || 0;
         document.getElementById('progress-bar').style.width = `${pct}%`;
-        document.getElementById('progress-percent').textContent = `${Math.round(pct)}%`;
         document.getElementById('progress-module').textContent = data.current_module || '';
         document.getElementById('progress-message').textContent = data.message || '';
+        updateProgressRing(pct);
 
         addLog(`[${data.current_module}] ${data.message}`);
 
         if (data.status === 'completed') {
             eventSource.close();
-            addLog('✅ Analysis complete!');
+            showToast('Analysis complete!', 'success', 6000);
+            addLog('Analysis complete!');
             fetchResults(jobId);
         } else if (data.status === 'failed') {
             eventSource.close();
-            addLog('❌ Analysis failed: ' + data.message);
+            showToast('Analysis failed: ' + data.message, 'error', 8000);
+            addLog('Analysis failed: ' + data.message);
         }
     };
 
@@ -225,7 +331,6 @@ async function fetchResults(jobId) {
         analysisResults = await resp.json();
         renderResults();
 
-        // Also fetch structure for 3D viewer
         try {
             const structResp = await fetch(`/api/structure/${jobId}`);
             structureData = await structResp.text();
@@ -234,6 +339,7 @@ async function fetchResults(jobId) {
         }
     } catch (e) {
         console.error('Failed to fetch results:', e);
+        showToast('Failed to fetch results', 'error');
     }
 }
 
@@ -251,7 +357,6 @@ function renderStats() {
     const rmsf = analysisResults.rmsf || {};
     const rg = analysisResults.rg || {};
     const clustering = analysisResults.clustering || {};
-
     const convergence = analysisResults.convergence || {};
     const bk = analysisResults.binding_kinetics || {};
 
@@ -260,17 +365,32 @@ function renderStats() {
         { value: info.n_atoms || 'N/A', label: 'Atoms' },
         { value: info.n_residues || 'N/A', label: 'Residues' },
         { value: info.total_time_ns ? `${info.total_time_ns.toFixed(1)} ns` : 'N/A', label: 'Sim Time' },
-        { value: rmsd.mean_rmsd ? `${rmsd.mean_rmsd.toFixed(2)} Å` : 'N/A', label: 'Mean RMSD' },
-        { value: rmsf.mean_rmsf ? `${rmsf.mean_rmsf.toFixed(2)} Å` : 'N/A', label: 'Mean RMSF' },
-        { value: rg.mean_rg ? `${rg.mean_rg.toFixed(1)} Å` : 'N/A', label: 'Mean Rg' },
+        { value: rmsd.mean_rmsd ? `${rmsd.mean_rmsd.toFixed(2)} \u00c5` : 'N/A', label: 'Mean RMSD' },
+        { value: rmsf.mean_rmsf ? `${rmsf.mean_rmsf.toFixed(2)} \u00c5` : 'N/A', label: 'Mean RMSF' },
+        { value: rg.mean_rg ? `${rg.mean_rg.toFixed(1)} \u00c5` : 'N/A', label: 'Mean Rg' },
         { value: clustering.n_clusters || 'N/A', label: 'Clusters' },
         { value: convergence.convergence_score != null ? `${(convergence.convergence_score * 100).toFixed(0)}%` : 'N/A', label: 'Convergence' },
         { value: bk.total_contact_fraction != null ? `${(bk.total_contact_fraction * 100).toFixed(0)}%` : 'N/A', label: 'Contact Frac.' },
     ];
 
-    document.getElementById('stats-grid').innerHTML = stats.map(s =>
-        `<div class="stat-card"><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>`
+    const grid = document.getElementById('stats-grid');
+    grid.innerHTML = stats.map((s, i) =>
+        `<div class="stat-card" style="animation-delay:${i * 50}ms">
+            <div class="stat-value">${s.value}</div>
+            <div class="stat-label">${s.label}</div>
+        </div>`
     ).join('');
+
+    // Stagger animation
+    grid.querySelectorAll('.stat-card').forEach((card, i) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(8px)';
+        setTimeout(() => {
+            card.style.transition = 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, i * 60);
+    });
 }
 
 // ===== Plots =====
@@ -281,12 +401,10 @@ const plotNameMap = {
     sasa_plot: 'SASA', dimensionality_plot: 'Dim. Reduction',
     dimensionality_3d_plot: '3D Projections',
     gnn_plot: 'GNN', transformer_plot: 'Transformer', msm_plot: 'MSM',
-    // Part A
     tica_plot: 'tICA', water_bridges_plot: 'Water Bridges', energy_plot: 'Energy Decomp.',
     prs_plot: 'PRS', nma_plot: 'Normal Modes', entropy_plot: 'Entropy',
     ifp_plot: 'Interaction FP', tunnel_plot: 'Tunnels/Cavities',
     vae_plot: 'VAE Latent', dynamic_network_plot: 'Dynamic Network',
-    // Phase 4
     convergence_plot: 'Convergence', binding_kinetics_plot: 'Binding Kinetics',
     network_graph_plot: 'Allosteric Network', training_loss_plot: 'Training Losses',
 };
@@ -316,7 +434,7 @@ function showPlot(key) {
     const plots = analysisResults.plots || {};
     const jsonStr = plots[key];
     if (!jsonStr) {
-        container.innerHTML = '<p style="padding:40px;text-align:center;color:#666;">No data for this plot.</p>';
+        container.innerHTML = '<p style="padding:40px;text-align:center;color:var(--text-muted);">No data for this plot.</p>';
         return;
     }
     try {
@@ -327,14 +445,14 @@ function showPlot(key) {
             height: 450,
         }, { responsive: true });
     } catch (e) {
-        container.innerHTML = `<p style="padding:40px;color:#ff6b6b;">Error rendering plot: ${e.message}</p>`;
+        container.innerHTML = `<p style="padding:40px;color:var(--accent-red);">Error rendering plot: ${e.message}</p>`;
     }
 }
 
 // ===== Insights =====
 const categoryColors = {
-    structural: '#55efc4', dynamic: '#a29bfe', allosteric: '#ff6b6b',
-    binding: '#ffd93d', transition: '#fd79a8',
+    structural: '#34d399', dynamic: '#a78bfa', allosteric: '#f87171',
+    binding: '#fbbf24', transition: '#f472b6',
 };
 
 const categoryLabels = {
@@ -343,20 +461,17 @@ const categoryLabels = {
 };
 
 const insightTypeLabels = {
-    // Original
     hinge_residue: 'Hinge Residue', flexible_loop: 'Flexible Loop', stable_core: 'Stable Core',
     allosteric_pathway: 'Allosteric Pathway', communication_hub: 'Communication Hub',
     binding_pocket: 'Binding Pocket', conformational_states: 'Conformational States',
     metastable_kinetics: 'Metastable Kinetics', domain_motion: 'Domain Motion',
     stability_assessment: 'Stability Assessment', gnn_key_residues: 'GNN Key Residues',
     transformer_transitions: 'Transformer Transitions',
-    // Part A
     water_bridge_sites: 'Water Bridge Sites', energy_hotspot: 'Energy Hotspot',
     prs_effectors_sensors: 'PRS Effectors/Sensors', nma_collective_motion: 'NMA Collective Motion',
     entropy_estimate: 'Entropy Estimate', cavity_channels: 'Cavity Channels',
     dynamic_network_evolution: 'Dynamic Network', vae_conformational_landscape: 'VAE Landscape',
     interaction_fingerprint: 'Interaction Fingerprint',
-    // Part B — New
     breathing_motion: 'Breathing Motion', cracking_event: 'Cracking / Local Unfolding',
     cryptic_binding_site: 'Cryptic Binding Site', druggability_score: 'Druggability Score',
     ptm_site_prediction: 'PTM Site Prediction', ppi_interface_hotspot: 'PPI Interface Hotspot',
@@ -376,18 +491,16 @@ function renderInsights() {
     const wrapper = document.getElementById('insights-list');
 
     if (insights.length === 0) {
-        wrapper.innerHTML = '<p style="color:#666;padding:20px;">No biological insights generated. This may indicate the trajectory is too short or lacks protein atoms.</p>';
+        wrapper.innerHTML = '<p style="color:var(--text-muted);padding:20px;">No biological insights generated. This may indicate the trajectory is too short or lacks protein atoms.</p>';
         return;
     }
 
-    // Count per category
     const counts = { all: insights.length };
     insights.forEach(ins => {
         const cat = ins.category || 'structural';
         counts[cat] = (counts[cat] || 0) + 1;
     });
 
-    // Build filter bar + cards container
     const categories = ['all', 'structural', 'dynamic', 'allosteric', 'binding', 'transition'];
     const filterBar = categories
         .filter(c => c === 'all' || counts[c])
@@ -424,7 +537,6 @@ function renderInsights() {
 
     wrapper.innerHTML = `<div class="insight-filters">${filterBar}</div><div class="insight-cards">${cards}</div>`;
 
-    // Bind filter clicks
     wrapper.querySelectorAll('.insight-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             activeInsightFilter = btn.dataset.filter;
@@ -446,14 +558,14 @@ function initViewer() {
     if (!structureData) return;
 
     const container = document.getElementById('viewer-3d');
-    container.innerHTML = '';
+    const placeholder = document.getElementById('viewer-placeholder');
+    if (placeholder) placeholder.style.display = 'none';
 
     viewer3d = $3Dmol.createViewer(container, {
-        backgroundColor: '#0a0a14',
+        backgroundColor: '#060610',
         antialias: true,
     });
 
-    // Detect format from extension
     const format = structureData.includes('ATOM') || structureData.includes('HETATM') ? 'pdb' : 'gro';
     viewer3d.addModel(structureData, format);
     viewer3d.setStyle({}, { cartoon: { color: 'spectrum' } });
@@ -492,8 +604,8 @@ function getColorObject(scheme) {
 function updateViewerBg() {
     if (!viewer3d) return;
     const bg = document.getElementById('viewer-bg').value;
-    const colors = { black: '#000000', dark: '#0a0a14', white: '#ffffff' };
-    viewer3d.setBackgroundColor(colors[bg] || '#0a0a14');
+    const colors = { black: '#000000', dark: '#060610', white: '#ffffff' };
+    viewer3d.setBackgroundColor(colors[bg] || '#060610');
     viewer3d.render();
 }
 
@@ -504,64 +616,63 @@ function highlightResidues() {
     const style = document.getElementById('viewer-style').value;
     const colorObj = getColorObject(document.getElementById('viewer-color').value);
 
-    // Reset
     viewer3d.setStyle({}, { [style]: colorObj });
 
     let residues = [];
-    let highlightColor = '#ff6b6b';
+    let highlightColor = '#f87171';
 
     switch (option) {
         case 'flexible':
             residues = analysisResults.rmsf?.high_flexibility_residues || [];
-            highlightColor = '#ff6b6b';
+            highlightColor = '#f87171';
             break;
         case 'hinge':
             residues = getInsightResidues('hinge_residue');
-            highlightColor = '#e17055';
+            highlightColor = '#fb923c';
             break;
         case 'stable_core':
             residues = getInsightResidues('stable_core');
-            highlightColor = '#55efc4';
+            highlightColor = '#34d399';
             break;
         case 'stiffness':
             residues = getInsightResidues('local_stiffness_map');
-            highlightColor = '#00b894';
+            highlightColor = '#10b981';
             break;
         case 'hubs':
             residues = (analysisResults.allosteric?.hub_residues || []).map(h => h.resid);
-            highlightColor = '#ff6b6b';
+            highlightColor = '#f87171';
             break;
         case 'gnn':
             residues = (analysisResults.gnn_results?.top_residues || []).map(r => r.resid);
-            highlightColor = '#a29bfe';
+            highlightColor = '#a78bfa';
             break;
         case 'mutation':
             residues = getInsightResidues('mutation_sensitivity');
-            highlightColor = '#d63031';
+            highlightColor = '#ef4444';
             break;
         case 'ptm':
             residues = getInsightResidues('ptm_site_prediction');
-            highlightColor = '#fdcb6e';
+            highlightColor = '#fbbf24';
             break;
         case 'cryptic':
             residues = getInsightResidues('cryptic_binding_site');
-            highlightColor = '#ffd93d';
+            highlightColor = '#fbbf24';
             break;
         case 'ppi':
             residues = getInsightResidues('ppi_interface_hotspot');
-            highlightColor = '#fab1a0';
+            highlightColor = '#fca5a5';
             break;
         case 'druggability':
             residues = getInsightResidues('druggability_score');
-            highlightColor = '#00cec9';
+            highlightColor = '#22d3ee';
             break;
         case 'aggregation':
             residues = getInsightResidues('aggregation_prone_region');
-            highlightColor = '#e17055';
+            highlightColor = '#fb923c';
             break;
         case 'electrostatic':
             residues = getInsightResidues('electrostatic_funnel');
-            highlightColor = '#74b9ff';
+            highlightColor = '#60a5fa';
             break;
     }
 
@@ -585,7 +696,7 @@ function getInsightResidues(insightType) {
 // ===== Downloads =====
 function downloadReport(type) {
     if (!currentJobId) {
-        alert('No analysis results available');
+        showToast('No analysis results available', 'warning');
         return;
     }
 
@@ -611,4 +722,6 @@ function downloadReport(type) {
             }
             break;
     }
+
+    showToast(`Preparing ${type.toUpperCase()} download...`, 'info', 2000);
 }

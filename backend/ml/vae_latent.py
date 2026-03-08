@@ -1,52 +1,102 @@
+from __future__ import annotations
+
+"""Variational Autoencoder (VAE) for conformational latent-space learning.
+
+Trains a small VAE on per-frame C-alpha pairwise-distance matrices to
+learn a continuous latent space of conformations.  Supports configurable
+latent dimensionality (2, 4, or 8) and reports per-frame reconstruction
+error alongside latent-space density histograms.
 """
-Variational Autoencoder (VAE) for conformational latent space learning.
-Trains a small VAE on per-frame Cα pairwise distance matrices
-to learn a continuous 2D latent space of conformations.
-"""
+
+import logging
+from typing import Any, Dict, List
+
 import numpy as np
+
+from ..utils.ml_feature_utils import (
+    standardise_features,
+    set_global_seed,
+)
+
+logger = logging.getLogger("md_ai_analyzer")
 
 try:
     import torch
     import torch.nn as nn
     import torch.optim as optim
     from torch.utils.data import DataLoader, TensorDataset
+
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
 
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
-def run_vae_analysis(universe, latent_dim=2, epochs=50, batch_size=32, **kwargs):
-    """
-    Train a VAE on Cα distance features and project into latent space.
 
-    Args:
-        latent_dim: Dimensionality of latent space (2, 4, or 8) (item 54)
+def run_vae_analysis(
+    universe: Any,
+    latent_dim: int = 2,
+    epochs: int = 50,
+    batch_size: int = 32,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Train a VAE on C-alpha distance features and project into latent space.
 
-    Returns dict with:
-        - latent_coords: per-frame latent coordinates
-        - reconstruction_loss: per-epoch reconstruction loss
-        - kl_loss: per-epoch KL divergence loss
-        - total_loss: per-epoch total loss
-        - latent_density: 2D histogram density of latent space
-        - reconstruction_error: final per-frame reconstruction MSE (item 55)
-        - latent_variance: variance explained per latent dimension
+    Parameters
+    ----------
+    universe : MDAnalysis.Universe
+        Loaded trajectory universe.
+    latent_dim : int
+        Dimensionality of the latent space (e.g. 2, 4, or 8).
+    epochs : int
+        Number of training epochs.
+    batch_size : int
+        Mini-batch size for training.
+    **kwargs
+        Additional keyword arguments (unused; accepted for orchestrator
+        compatibility).
+
+    Returns
+    -------
+    dict
+        Keys:
+        - ``latent_coords`` : per-frame latent coordinates
+        - ``reconstruction_loss`` : per-epoch reconstruction loss
+        - ``kl_loss`` : per-epoch KL divergence loss
+        - ``total_loss`` : per-epoch total loss
+        - ``latent_density`` : 2-D histogram density of latent space
+        - ``n_frames`` : number of frames
+        - ``input_dim`` : feature dimensionality
+        - ``latent_dim`` : latent dimensionality used
+        - ``epochs_trained`` : number of epochs
+        - ``reconstruction_error`` : final mean per-frame reconstruction MSE
+        - ``per_frame_recon_error`` : per-frame reconstruction MSE list
+        - ``latent_variance`` : variance per latent dimension
     """
     if not HAS_TORCH:
+        logger.error("PyTorch not available; cannot run VAE analysis.")
         return {"error": "PyTorch not available for VAE analysis"}
+
+    # Reproducibility
+    set_global_seed(42)
 
     try:
         ca = universe.select_atoms("protein and name CA")
         if len(ca) == 0:
+            logger.error("No CA atoms found for VAE analysis.")
             return {"error": "No CA atoms found"}
 
         n_res = len(ca)
         n_frames = len(universe.trajectory)
 
         if n_frames < 20:
+            logger.warning("Only %d frames; need >= 20 for VAE.", n_frames)
             return {"error": "Too few frames for VAE training"}
 
-        # Build feature matrix: for each frame, compute upper triangle of pairwise distances
-        # For large proteins, subsample residues
+        # ── Build feature matrix ─────────────────────────────────
+        # For large proteins, sub-sample residues to keep features tractable.
         max_residues = 100
         if n_res > max_residues:
             stride = n_res // max_residues
@@ -56,26 +106,22 @@ def run_vae_analysis(universe, latent_dim=2, epochs=50, batch_size=32, **kwargs)
             ca_subset = ca
             n_feat_res = n_res
 
-        # Collect pairwise distances
         from MDAnalysis.lib.distances import distance_array
-        n_pairs = n_feat_res * (n_feat_res - 1) // 2
-        features = np.zeros((n_frames, n_pairs))
 
-        for frame_idx, ts in enumerate(universe.trajectory):
+        n_pairs = n_feat_res * (n_feat_res - 1) // 2
+        triu_idx = np.triu_indices(n_feat_res, k=1)
+        features = np.zeros((n_frames, n_pairs), dtype=np.float64)
+
+        for frame_idx, _ts in enumerate(universe.trajectory):
             dists = distance_array(ca_subset.positions, ca_subset.positions)
-            # Upper triangle
-            triu_idx = np.triu_indices(n_feat_res, k=1)
             features[frame_idx] = dists[triu_idx]
 
-        # Normalize features
-        feat_mean = features.mean(axis=0)
-        feat_std = features.std(axis=0)
-        feat_std[feat_std == 0] = 1.0
-        features_norm = (features - feat_mean) / feat_std
+        # ── Normalise features via shared utility ────────────────
+        features_norm, _feat_mean, _feat_std = standardise_features(features)
 
-        # Build VAE
-        input_dim = n_pairs
-        hidden_dim = min(256, max(64, input_dim // 4))
+        # ── Build VAE ────────────────────────────────────────────
+        input_dim: int = n_pairs
+        hidden_dim: int = min(256, max(64, input_dim // 4))
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -85,22 +131,22 @@ def run_vae_analysis(universe, latent_dim=2, epochs=50, batch_size=32, **kwargs)
         dataset = TensorDataset(torch.FloatTensor(features_norm))
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-        # Training
-        recon_losses = []
-        kl_losses = []
-        total_losses = []
+        # ── Training ─────────────────────────────────────────────
+        recon_losses: List[float] = []
+        kl_losses: List[float] = []
+        total_losses: List[float] = []
 
         for epoch in range(epochs):
-            epoch_recon = 0
-            epoch_kl = 0
-            n_batches = 0
+            epoch_recon = 0.0
+            epoch_kl = 0.0
+            n_samples = 0
 
             model.train()
             for (batch,) in loader:
                 batch = batch.to(device)
                 recon, mu, logvar = model(batch)
 
-                recon_loss = nn.functional.mse_loss(recon, batch, reduction='sum')
+                recon_loss = nn.functional.mse_loss(recon, batch, reduction="sum")
                 kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                 loss = recon_loss + kl_loss
 
@@ -110,28 +156,33 @@ def run_vae_analysis(universe, latent_dim=2, epochs=50, batch_size=32, **kwargs)
 
                 epoch_recon += recon_loss.item()
                 epoch_kl += kl_loss.item()
-                n_batches += len(batch)
+                n_samples += len(batch)
 
-            recon_losses.append(round(epoch_recon / n_batches, 4))
-            kl_losses.append(round(epoch_kl / n_batches, 4))
-            total_losses.append(round((epoch_recon + epoch_kl) / n_batches, 4))
+            recon_losses.append(round(epoch_recon / max(n_samples, 1), 4))
+            kl_losses.append(round(epoch_kl / max(n_samples, 1), 4))
+            total_losses.append(
+                round((epoch_recon + epoch_kl) / max(n_samples, 1), 4)
+            )
 
-        # Encode all frames
+        # ── Encode all frames (eval mode) ────────────────────────
         model.eval()
         with torch.no_grad():
             all_data = torch.FloatTensor(features_norm).to(device)
-            mu, logvar = model.encode(all_data)
-            latent = mu.cpu().numpy()
+            mu_all, _logvar_all = model.encode(all_data)
+            latent: np.ndarray = mu_all.cpu().numpy()
 
-            # Reconstruction quality (item 55)
+            # Reconstruction quality
             recon_all, _, _ = model(all_data)
-            per_frame_mse = torch.mean((recon_all - all_data) ** 2, dim=1).cpu().numpy()
+            per_frame_mse: np.ndarray = (
+                torch.mean((recon_all - all_data) ** 2, dim=1).cpu().numpy()
+            )
             overall_recon_error = float(per_frame_mse.mean())
 
         # Per-dimension variance in latent space
-        latent_variance = np.var(latent, axis=0).tolist()
+        latent_variance: List[float] = np.var(latent, axis=0).tolist()
 
-        # Latent space density (2D histogram)
+        # Latent-space density (2-D histogram on first two dims)
+        density: Dict[str, Any]
         if latent.shape[1] >= 2:
             hist, xedges, yedges = np.histogram2d(
                 latent[:, 0], latent[:, 1], bins=30
@@ -143,6 +194,12 @@ def run_vae_analysis(universe, latent_dim=2, epochs=50, batch_size=32, **kwargs)
             }
         else:
             density = {}
+
+        logger.info(
+            "VAE training complete: %d epochs, final recon error=%.6f.",
+            epochs,
+            overall_recon_error,
+        )
 
         return {
             "latent_coords": latent.tolist(),
@@ -160,14 +217,35 @@ def run_vae_analysis(universe, latent_dim=2, epochs=50, batch_size=32, **kwargs)
         }
 
     except Exception as e:
+        logger.exception("VAE analysis failed: %s", e)
         return {"error": str(e)}
 
 
-if HAS_TORCH:
-    class _VAE(nn.Module):
-        """Simple Variational Autoencoder."""
+# ---------------------------------------------------------------------------
+# VAE Model
+# ---------------------------------------------------------------------------
 
-        def __init__(self, input_dim, hidden_dim, latent_dim):
+if HAS_TORCH:
+
+    class _VAE(nn.Module):
+        """Simple Variational Autoencoder for conformational analysis.
+
+        Parameters
+        ----------
+        input_dim : int
+            Number of input features (pairwise distances).
+        hidden_dim : int
+            Width of the hidden layers.
+        latent_dim : int
+            Dimensionality of the latent space.
+        """
+
+        def __init__(
+            self,
+            input_dim: int,
+            hidden_dim: int,
+            latent_dim: int,
+        ) -> None:
             super().__init__()
             self.encoder = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim),
@@ -185,19 +263,68 @@ if HAS_TORCH:
                 nn.Linear(hidden_dim, input_dim),
             )
 
-        def encode(self, x):
+        def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+            """Encode input into latent mean and log-variance.
+
+            Parameters
+            ----------
+            x : torch.Tensor
+                Input tensor of shape ``(batch, input_dim)``.
+
+            Returns
+            -------
+            tuple[torch.Tensor, torch.Tensor]
+                ``(mu, logvar)`` each of shape ``(batch, latent_dim)``.
+            """
             h = self.encoder(x)
             return self.fc_mu(h), self.fc_logvar(h)
 
-        def reparameterize(self, mu, logvar):
+        def reparameterize(
+            self, mu: torch.Tensor, logvar: torch.Tensor
+        ) -> torch.Tensor:
+            """Apply the reparameterisation trick.
+
+            Parameters
+            ----------
+            mu : torch.Tensor
+            logvar : torch.Tensor
+
+            Returns
+            -------
+            torch.Tensor
+                Sampled latent vector.
+            """
             std = torch.exp(0.5 * logvar)
             eps = torch.randn_like(std)
             return mu + eps * std
 
-        def decode(self, z):
+        def decode(self, z: torch.Tensor) -> torch.Tensor:
+            """Decode latent vector back to input space.
+
+            Parameters
+            ----------
+            z : torch.Tensor
+
+            Returns
+            -------
+            torch.Tensor
+            """
             return self.decoder(z)
 
-        def forward(self, x):
+        def forward(
+            self, x: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            """Full forward pass: encode, reparameterise, decode.
+
+            Parameters
+            ----------
+            x : torch.Tensor
+
+            Returns
+            -------
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+                ``(reconstruction, mu, logvar)``.
+            """
             mu, logvar = self.encode(x)
             z = self.reparameterize(mu, logvar)
             return self.decode(z), mu, logvar

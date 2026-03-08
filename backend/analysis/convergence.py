@@ -1,129 +1,199 @@
+"""Convergence Assessment.
+
+Block averaging, autocorrelation analysis, and cosine content of
+principal components to evaluate whether the MD simulation has converged.
 """
-Convergence Assessment.
-Block averaging and autocorrelation analysis to evaluate
-whether the simulation has converged.
-"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List, Optional, Sequence
+
 import numpy as np
+import MDAnalysis as mda
+
+from ..utils.trajectory_utils import select_ca_atoms, collect_ca_coords_flat
+from ..utils.ml_feature_utils import pca_reduce
+
+logger = logging.getLogger("md_ai_analyzer")
 
 
-def compute_convergence(universe, **kwargs):
-    """
-    Assess trajectory convergence using block averaging, autocorrelation,
-    and cosine content of principal components.
+def compute_convergence(
+    universe: mda.Universe,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Assess trajectory convergence using multiple diagnostics.
 
-    Returns dict with:
-        - rmsd_block_averages: block-averaged RMSD statistics
-        - rg_block_averages: block-averaged Rg statistics
-        - autocorrelation_rmsd: autocorrelation function of RMSD
-        - cosine_content: cosine content of first PCA components
-        - convergence_score: overall 0-1 convergence assessment
-        - recommendations: text suggestions
+    Diagnostics performed:
+
+    * **Block averaging** of RMSD and Rg time series.
+    * **Autocorrelation function** of RMSD.
+    * **Cosine content** of the first PCA projections (values close to 1
+      indicate random-walk-like sampling).
+    * **Overall convergence score** (0--1) aggregated from the above.
+
+    Parameters
+    ----------
+    universe : mda.Universe
+        MDAnalysis Universe with a loaded trajectory.
+    **kwargs : Any
+        Additional keyword arguments (unused, accepted for API consistency).
+
+    Returns
+    -------
+    dict[str, Any]
+        ``time``
+            List of timestamps (ps).
+        ``rmsd_block_averages``
+            Block-averaged RMSD statistics at different block counts.
+        ``rg_block_averages``
+            Block-averaged Rg statistics at different block counts.
+        ``autocorrelation_rmsd``
+            Normalised autocorrelation function of RMSD.
+        ``cosine_content``
+            Cosine content for the first few PCA components.
+        ``convergence_score``
+            Aggregated convergence score in [0, 1].
+        ``rmsd_drift``
+            Relative RMSD drift between first and last 20 % of frames.
+        ``rg_drift``
+            Relative Rg drift between first and last 20 % of frames.
+        ``recommendations``
+            Human-readable suggestions based on the diagnostics.
     """
     try:
-        ca = universe.select_atoms("protein and name CA")
-        if len(ca) == 0:
-            ca = universe.select_atoms("all")
+        ca = select_ca_atoms(universe)
+        n_frames: int = len(universe.trajectory)
 
-        n_frames = len(universe.trajectory)
         if n_frames < 20:
+            logger.warning(
+                "Only %d frames available; too few for convergence assessment",
+                n_frames,
+            )
             return {"error": "Too few frames for convergence assessment"}
 
-        # ── Collect RMSD and Rg time series ────────────────────
+        logger.info(
+            "Convergence assessment: %d CA atoms, %d frames", len(ca), n_frames
+        )
+
+        # ── Collect RMSD time series ─────────────────────────────
         from MDAnalysis.analysis.rms import RMSD as MDA_RMSD
+
         ref = universe.copy()
         ref.trajectory[0]
         R = MDA_RMSD(universe, ref, select="backbone", ref_frame=0)
         R.run()
-        rmsd_ts = R.results.rmsd[:, 2]
-        times = R.results.rmsd[:, 1].tolist()
+        rmsd_ts: np.ndarray = R.results.rmsd[:, 2]
+        times: List[float] = R.results.rmsd[:, 1].tolist()
 
-        # Rg
-        rg_ts = []
-        for ts in universe.trajectory:
-            rg_ts.append(ca.radius_of_gyration())
-        rg_ts = np.array(rg_ts)
+        # ── Collect Rg time series ───────────────────────────────
+        rg_ts = np.empty(n_frames, dtype=np.float64)
+        for i, _ts in enumerate(universe.trajectory):
+            rg_ts[i] = ca.radius_of_gyration()
 
-        # ── Block Averaging ────────────────────────────────────
-        rmsd_blocks = _block_average(rmsd_ts)
-        rg_blocks = _block_average(rg_ts)
+        # ── Block averaging ──────────────────────────────────────
+        rmsd_blocks: List[Dict[str, Any]] = _block_average(rmsd_ts)
+        rg_blocks: List[Dict[str, Any]] = _block_average(rg_ts)
 
-        # ── Autocorrelation of RMSD ────────────────────────────
-        acf_rmsd = _autocorrelation(rmsd_ts, max_lag=min(n_frames // 2, 200))
+        # ── Autocorrelation of RMSD ──────────────────────────────
+        acf_rmsd: List[Dict[str, Any]] = _autocorrelation(
+            rmsd_ts, max_lag=min(n_frames // 2, 200)
+        )
 
-        # ── Cosine Content of PCA ──────────────────────────────
-        coords = []
-        for ts_frame in universe.trajectory:
-            coords.append(ca.positions.flatten().copy())
-        coords = np.array(coords)
+        # ── Cosine content of PCA ────────────────────────────────
+        coords: np.ndarray = collect_ca_coords_flat(universe, atoms=ca)
 
-        cosine_content = []
+        cosine_content: List[Dict[str, Any]] = []
         try:
-            from sklearn.decomposition import PCA
             n_comp = min(5, coords.shape[0] - 1, coords.shape[1])
             if n_comp >= 1:
-                pca = PCA(n_components=n_comp)
-                projections = pca.fit_transform(coords)
-                for i in range(n_comp):
+                projections, _pca = pca_reduce(coords, n_components=n_comp)
+                for i in range(projections.shape[1]):
                     cc = _cosine_content_pc(projections[:, i])
-                    cosine_content.append({
-                        "pc": i + 1,
-                        "cosine_content": round(float(cc), 4),
-                        "converged": cc < 0.5,
-                    })
-        except Exception:
-            pass
+                    cosine_content.append(
+                        {
+                            "pc": i + 1,
+                            "cosine_content": round(float(cc), 4),
+                            "converged": cc < 0.5,
+                        }
+                    )
+        except Exception as exc:
+            logger.debug("Cosine content PCA failed: %s", exc)
 
-        # ── Overall Convergence Score ──────────────────────────
-        score = 0.0
-        n_checks = 0
-
-        # Check 1: RMSD stabilization (last 20% vs first 20%)
+        # ── Overall convergence score ────────────────────────────
+        score: float = 0.0
+        n_checks: int = 0
         split = max(1, n_frames // 5)
-        first_mean = np.mean(rmsd_ts[:split])
-        last_mean = np.mean(rmsd_ts[-split:])
-        last_std = np.std(rmsd_ts[-split:])
-        rmsd_drift = abs(last_mean - first_mean) / (last_mean + 1e-8)
-        rmsd_score = max(0, 1.0 - rmsd_drift * 2)
+
+        # Check 1: RMSD stabilisation (last 20 % vs first 20 %)
+        first_mean = float(np.mean(rmsd_ts[:split]))
+        last_mean = float(np.mean(rmsd_ts[-split:]))
+        rmsd_drift: float = abs(last_mean - first_mean) / (last_mean + 1e-8)
+        rmsd_score = max(0.0, 1.0 - rmsd_drift * 2)
         score += rmsd_score
         n_checks += 1
 
-        # Check 2: Rg stabilization
-        rg_first = np.mean(rg_ts[:split])
-        rg_last = np.mean(rg_ts[-split:])
-        rg_drift = abs(rg_last - rg_first) / (rg_last + 1e-8)
-        rg_score = max(0, 1.0 - rg_drift * 2)
+        # Check 2: Rg stabilisation
+        rg_first = float(np.mean(rg_ts[:split]))
+        rg_last = float(np.mean(rg_ts[-split:]))
+        rg_drift: float = abs(rg_last - rg_first) / (rg_last + 1e-8)
+        rg_score = max(0.0, 1.0 - rg_drift * 2)
         score += rg_score
         n_checks += 1
 
-        # Check 3: Block average SEM convergence
+        # Check 3: Block-average SEM convergence
         if rmsd_blocks:
             last_sem = rmsd_blocks[-1]["sem"]
-            first_sem = rmsd_blocks[0]["sem"] if rmsd_blocks[0]["sem"] > 0 else 1.0
+            first_sem = (
+                rmsd_blocks[0]["sem"] if rmsd_blocks[0]["sem"] > 0 else 1.0
+            )
             block_score = min(1.0, first_sem / (last_sem + 1e-8) * 0.3)
             score += block_score
             n_checks += 1
 
         # Check 4: Cosine content
         if cosine_content:
-            cc_avg = np.mean([c["cosine_content"] for c in cosine_content[:3]])
-            cc_score = max(0, 1.0 - cc_avg)
+            cc_avg = float(
+                np.mean([c["cosine_content"] for c in cosine_content[:3]])
+            )
+            cc_score = max(0.0, 1.0 - cc_avg)
             score += cc_score
             n_checks += 1
 
-        overall_score = round(score / max(n_checks, 1), 3)
+        overall_score: float = round(score / max(n_checks, 1), 3)
 
-        # Recommendations
-        recommendations = []
+        # ── Recommendations ──────────────────────────────────────
+        recommendations: List[str] = []
         if rmsd_drift > 0.15:
-            recommendations.append("RMSD has not stabilized — consider extending simulation")
+            recommendations.append(
+                "RMSD has not stabilized \u2014 consider extending simulation"
+            )
         if rg_drift > 0.1:
-            recommendations.append("Radius of gyration is still drifting — protein may not be equilibrated")
+            recommendations.append(
+                "Radius of gyration is still drifting \u2014 "
+                "protein may not be equilibrated"
+            )
         if cosine_content and cosine_content[0]["cosine_content"] > 0.7:
-            recommendations.append("PC1 has high cosine content — trajectory may be sampling a random walk, not converged dynamics")
+            recommendations.append(
+                "PC1 has high cosine content \u2014 trajectory may be "
+                "sampling a random walk, not converged dynamics"
+            )
         if overall_score > 0.7:
-            recommendations.append("Trajectory appears reasonably well-converged")
+            recommendations.append(
+                "Trajectory appears reasonably well-converged"
+            )
         elif overall_score < 0.4:
-            recommendations.append("Trajectory shows poor convergence — results should be interpreted with caution")
+            recommendations.append(
+                "Trajectory shows poor convergence \u2014 results should "
+                "be interpreted with caution"
+            )
+
+        logger.info(
+            "Convergence assessment complete: score=%.3f, rmsd_drift=%.4f, "
+            "rg_drift=%.4f",
+            overall_score,
+            rmsd_drift,
+            rg_drift,
+        )
 
         return {
             "time": times,
@@ -138,73 +208,128 @@ def compute_convergence(universe, **kwargs):
         }
 
     except Exception as e:
+        logger.error("Convergence assessment failed: %s", e, exc_info=True)
         return {"error": str(e)}
 
 
-def _block_average(data, n_blocks_list=None):
-    """Compute block averages with increasing block sizes."""
-    n = len(data)
+# ─────────────────────────────────────────────────────────────────────
+# Private helpers
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _block_average(
+    data: np.ndarray,
+    n_blocks_list: Optional[Sequence[int]] = None,
+) -> List[Dict[str, Any]]:
+    """Compute block averages with increasing block sizes.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        1-D time series.
+    n_blocks_list : sequence of int, optional
+        Block counts to evaluate (default ``[2, 4, 5, 8, 10, 20]``).
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Each entry contains ``n_blocks``, ``block_size``, ``mean``, and
+        ``sem`` (standard error of the mean).
+    """
+    n: int = len(data)
     if n_blocks_list is None:
         n_blocks_list = [2, 4, 5, 8, 10, 20]
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for nb in n_blocks_list:
         if nb > n:
             continue
         block_size = n // nb
         if block_size < 2:
             continue
-        block_means = []
-        for i in range(nb):
-            start = i * block_size
-            end = start + block_size
-            block_means.append(np.mean(data[start:end]))
-        block_means = np.array(block_means)
-        sem = np.std(block_means) / np.sqrt(nb)
-        results.append({
-            "n_blocks": nb,
-            "block_size": block_size,
-            "mean": round(float(np.mean(block_means)), 4),
-            "sem": round(float(sem), 6),
-        })
+
+        # Vectorised block-mean computation
+        usable = nb * block_size
+        blocks = data[:usable].reshape(nb, block_size)
+        block_means = blocks.mean(axis=1)
+        sem = float(np.std(block_means, ddof=0) / np.sqrt(nb))
+
+        results.append(
+            {
+                "n_blocks": nb,
+                "block_size": block_size,
+                "mean": round(float(np.mean(block_means)), 4),
+                "sem": round(sem, 6),
+            }
+        )
     return results
 
 
-def _autocorrelation(data, max_lag=200):
-    """Compute normalized autocorrelation function."""
-    n = len(data)
-    mean = np.mean(data)
-    var = np.var(data)
+def _autocorrelation(
+    data: np.ndarray,
+    max_lag: int = 200,
+) -> List[Dict[str, Any]]:
+    """Compute the normalised autocorrelation function.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        1-D time series.
+    max_lag : int, optional
+        Maximum lag to compute (default 200).
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Each entry contains ``lag`` and the normalised ``acf`` value.
+    """
+    n: int = len(data)
+    mean = float(np.mean(data))
+    var = float(np.var(data))
     if var == 0:
         return []
 
-    data_centered = data - mean
+    data_centered: np.ndarray = data - mean
     max_lag = min(max_lag, n - 1)
-    acf = []
-    for lag in range(0, max_lag, max(1, max_lag // 50)):
-        c = np.mean(data_centered[:n - lag] * data_centered[lag:])
-        acf.append({
-            "lag": lag,
-            "acf": round(float(c / var), 4),
-        })
+    step = max(1, max_lag // 50)
+
+    acf: List[Dict[str, Any]] = []
+    for lag in range(0, max_lag, step):
+        c = float(np.mean(data_centered[: n - lag] * data_centered[lag:]))
+        acf.append(
+            {
+                "lag": lag,
+                "acf": round(c / var, 4),
+            }
+        )
     return acf
 
 
-def _cosine_content_pc(projection):
+def _cosine_content_pc(projection: np.ndarray) -> float:
+    """Compute the cosine content of a principal-component projection.
+
+    A value close to 1 indicates random-diffusion-like motion; close to 0
+    indicates well-converged conformational sampling.
+
+    Parameters
+    ----------
+    projection : np.ndarray
+        1-D PCA projection time series.
+
+    Returns
+    -------
+    float
+        Cosine content in approximately [0, 1].
     """
-    Compute cosine content of a PC projection.
-    cos_content = 2/T * (integral cos(pi*t/T) * q(t) dt)^2 / (integral q(t)^2 dt)
-    Value close to 1 means random diffusion, close to 0 means converged sampling.
-    """
-    n = len(projection)
+    n: int = len(projection)
     if n < 2:
         return 1.0
 
-    t = np.arange(n)
+    t = np.arange(n, dtype=np.float64)
     cos_wave = np.cos(np.pi * t / (n - 1))
 
-    numerator = (np.sum(projection * cos_wave)) ** 2
-    denominator = np.sum(projection ** 2)
+    numerator = float(np.sum(projection * cos_wave)) ** 2
+    denominator = float(np.sum(projection ** 2))
 
     if denominator == 0:
         return 1.0

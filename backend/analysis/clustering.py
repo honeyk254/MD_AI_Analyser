@@ -1,73 +1,84 @@
+"""Conformational clustering.
+
+Groups trajectory frames into structural clusters using K-Means in
+PCA-reduced coordinate space, with automatic selection of the optimal
+cluster count via silhouette analysis.
 """
-Conformational clustering.
-Groups trajectory frames into structural clusters.
-"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict
+
 import numpy as np
+import MDAnalysis as mda
 from sklearn.cluster import KMeans
 
+from ..utils.trajectory_utils import select_ca_atoms, collect_ca_coords_flat
+from ..utils.ml_feature_utils import pca_reduce, find_optimal_k
 
-def cluster_conformations(universe, **kwargs):
-    """
-    Cluster trajectory conformations using coordinates from PCA space.
-    Falls back to Cα RMSD-based coordinates if PCA not available.
+logger = logging.getLogger("md_ai_analyzer")
 
-    Returns dict with:
-        - labels: cluster assignment per frame
-        - n_clusters: number of clusters
-        - populations: fraction of frames in each cluster
-        - centroids: centroid frame index per cluster
-        - silhouette_score: clustering quality metric
+
+def cluster_conformations(
+    universe: mda.Universe,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Cluster trajectory conformations in PCA-reduced C-alpha space.
+
+    Parameters
+    ----------
+    universe : mda.Universe
+        MDAnalysis Universe with a loaded trajectory.
+    **kwargs : Any
+        Ignored; accepted for orchestrator compatibility.
+
+    Returns
+    -------
+    dict[str, Any]
+        Keys:
+
+        * ``labels`` -- cluster assignment per frame.
+        * ``n_clusters`` -- optimal number of clusters.
+        * ``populations`` -- fraction of frames in each cluster.
+        * ``centroids`` -- representative frame index per cluster.
+        * ``silhouette_score`` -- best silhouette score.
+        * ``silhouette_scores_by_k`` -- silhouette scores for each *k*.
+        * ``n_transitions`` -- number of cluster-to-cluster transitions.
+        * ``transitions`` -- first 100 transition events.
     """
     try:
-        from sklearn.metrics import silhouette_score as sk_silhouette
+        ca: mda.AtomGroup = select_ca_atoms(universe)
 
-        ca = universe.select_atoms("protein and name CA")
-        if len(ca) == 0:
-            ca = universe.select_atoms("all")
+        # Collect flattened coordinates via shared utility
+        coords: np.ndarray = collect_ca_coords_flat(universe, atoms=ca)
 
-        # Collect flattened coords
-        coords = []
-        for ts in universe.trajectory:
-            coords.append(ca.positions.flatten().copy())
-        coords = np.array(coords)
-
-        # Reduce dimensionality first with PCA
-        from sklearn.decomposition import PCA
-        n_comp = min(10, coords.shape[0] - 1, coords.shape[1])
-        if n_comp < 2:
+        # PCA reduction via shared utility
+        try:
+            reduced, _pca_model = pca_reduce(coords, n_components=10)
+        except ValueError:
+            logger.error("Not enough frames for PCA reduction in clustering")
             return {"error": "Not enough frames for clustering"}
 
-        pca = PCA(n_components=n_comp)
-        reduced = pca.fit_transform(coords)
+        if reduced.shape[1] < 2:
+            logger.error("PCA produced fewer than 2 components")
+            return {"error": "Not enough frames for clustering"}
 
-        # Determine optimal k using elbow / silhouette
-        best_k = 2
-        best_score = -1
-        max_k = min(10, len(reduced) // 5)
-        max_k = max(max_k, 2)
+        # Determine optimal k via shared utility
+        best_k, scores = find_optimal_k(reduced, k_min=2, random_state=42)
 
-        scores = {}
-        for k in range(2, max_k + 1):
-            km = KMeans(n_clusters=k, n_init=10, random_state=42)
-            labels = km.fit_predict(reduced)
-            if len(set(labels)) < 2:
-                continue
-            score = sk_silhouette(reduced, labels)
-            scores[k] = float(score)
-            if score > best_score:
-                best_score = score
-                best_k = k
-
-        # Final clustering
+        # Final clustering with the optimal k
         km = KMeans(n_clusters=best_k, n_init=10, random_state=42)
-        labels = km.fit_predict(reduced)
+        labels: np.ndarray = km.fit_predict(reduced)
 
-        # Populations
+        # Populations (vectorised)
         unique, counts = np.unique(labels, return_counts=True)
-        populations = {int(u): round(float(c) / len(labels), 3) for u, c in zip(unique, counts)}
+        populations: dict[int, float] = {
+            int(u): round(float(c) / len(labels), 3)
+            for u, c in zip(unique, counts)
+        }
 
-        # Find centroid frame (closest to cluster center)
-        centroids = {}
+        # Centroid frame: closest frame to each cluster centre (vectorised)
+        centroids: dict[int, int] = {}
         for cl in unique:
             mask = labels == cl
             center = km.cluster_centers_[cl]
@@ -75,15 +86,26 @@ def cluster_conformations(universe, **kwargs):
             frame_indices = np.where(mask)[0]
             centroids[int(cl)] = int(frame_indices[np.argmin(dists)])
 
-        # Transition sequence
-        transitions = []
-        for i in range(1, len(labels)):
-            if labels[i] != labels[i-1]:
-                transitions.append({
-                    "frame": i,
-                    "from_cluster": int(labels[i-1]),
-                    "to_cluster": int(labels[i]),
-                })
+        # Transition detection (vectorised diff)
+        label_diffs = np.diff(labels)
+        transition_frames = np.where(label_diffs != 0)[0] + 1
+        transitions = [
+            {
+                "frame": int(f),
+                "from_cluster": int(labels[f - 1]),
+                "to_cluster": int(labels[f]),
+            }
+            for f in transition_frames[:100]
+        ]
+
+        best_score: float = scores.get(best_k, -1.0)
+
+        logger.info(
+            "Clustering: k=%d, silhouette=%.3f, %d transitions",
+            best_k,
+            best_score,
+            len(transition_frames),
+        )
 
         return {
             "labels": labels.tolist(),
@@ -92,9 +114,10 @@ def cluster_conformations(universe, **kwargs):
             "centroids": centroids,
             "silhouette_score": best_score,
             "silhouette_scores_by_k": scores,
-            "n_transitions": len(transitions),
-            "transitions": transitions[:100],
+            "n_transitions": int(len(transition_frames)),
+            "transitions": transitions,
         }
 
     except Exception as e:
+        logger.exception("Clustering computation failed")
         return {"error": str(e), "labels": [], "n_clusters": 0}

@@ -7,231 +7,418 @@
     <title>MD AI Analyzer — AI-Powered Molecular Dynamics Analysis</title>
     <meta name="description"
         content="Advanced AI-powered molecular dynamics trajectory analysis platform with GNN, transformers, and biological inference">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
 </head>
 
 <body>
+    <!-- Toast container -->
+    <div class="toast-container" id="toast-container"></div>
+
     <div class="app-container">
         <!-- ===== Header ===== -->
         <header class="header">
-            <h1>🧬 MD AI Analyzer</h1>
-            <p class="subtitle">AI-Powered Molecular Dynamics Trajectory Analysis</p>
-            <div class="gpu-badge" id="gpu-badge" style="display:none;"></div>
+            <div class="header-glow"></div>
+            <div class="header-content">
+                <div class="logo-mark">
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                        <defs>
+                            <linearGradient id="logo-grad" x1="0" y1="0" x2="48" y2="48">
+                                <stop offset="0%" stop-color="#00d4ff" />
+                                <stop offset="50%" stop-color="#a29bfe" />
+                                <stop offset="100%" stop-color="#fd79a8" />
+                            </linearGradient>
+                        </defs>
+                        <circle cx="24" cy="24" r="22" stroke="url(#logo-grad)" stroke-width="2.5" fill="none" />
+                        <path
+                            d="M16 14C16 14 20 20 24 24C28 28 32 34 32 34M32 14C32 14 28 20 24 24C20 28 16 34 16 34"
+                            stroke="url(#logo-grad)" stroke-width="2" stroke-linecap="round" />
+                        <circle cx="16" cy="14" r="3" fill="#00d4ff" />
+                        <circle cx="32" cy="14" r="3" fill="#a29bfe" />
+                        <circle cx="16" cy="34" r="3" fill="#a29bfe" />
+                        <circle cx="32" cy="34" r="3" fill="#fd79a8" />
+                        <circle cx="24" cy="24" r="4" fill="url(#logo-grad)" />
+                    </svg>
+                </div>
+                <h1>MD AI Analyzer</h1>
+                <p class="subtitle">AI-Powered Molecular Dynamics Trajectory Analysis</p>
+                <div class="gpu-badge" id="gpu-badge" style="display:none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5" stroke-linecap="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                    </svg>
+                    <span id="gpu-badge-text"></span>
+                </div>
+            </div>
         </header>
 
         <!-- ===== Navigation ===== -->
-        <nav class="nav-tabs">
-            <button class="nav-tab active" data-section="upload">📤 Upload</button>
-            <button class="nav-tab" data-section="progress">⏳ Progress</button>
-            <button class="nav-tab" data-section="results">📊 Results</button>
-            <button class="nav-tab" data-section="insights">🧠 Insights</button>
-            <button class="nav-tab" data-section="viewer">🔬 3D Viewer</button>
-            <button class="nav-tab" data-section="downloads">📥 Downloads</button>
+        <nav class="nav-tabs" id="nav-tabs">
+            <button class="nav-tab active" data-section="upload">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span>Upload</span>
+            </button>
+            <button class="nav-tab" data-section="progress">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+                <span>Progress</span>
+            </button>
+            <button class="nav-tab" data-section="results">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10" />
+                    <line x1="12" y1="20" x2="12" y2="4" />
+                    <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+                <span>Results</span>
+            </button>
+            <button class="nav-tab" data-section="insights">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 12 18.469a3.374 3.374 0 0 0-.834-1.373z" />
+                </svg>
+                <span>Insights</span>
+            </button>
+            <button class="nav-tab" data-section="viewer">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20" />
+                    <path d="M2 12h4M18 12h4" />
+                </svg>
+                <span>3D Viewer</span>
+            </button>
+            <button class="nav-tab" data-section="downloads">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Downloads</span>
+            </button>
         </nav>
 
         <!-- ===== Upload Section ===== -->
         <section id="section-upload" class="section active">
             <div class="card">
-                <h2>📤 Upload MD Simulation Files</h2>
+                <div class="card-header">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    <h2>Upload MD Simulation Files</h2>
+                </div>
+
                 <div class="upload-zone" id="upload-zone">
-                    <div class="icon">📂</div>
+                    <div class="upload-zone-bg"></div>
+                    <div class="upload-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                            <polyline points="13 2 13 9 20 9" />
+                        </svg>
+                    </div>
                     <h3>Drag & drop your files here</h3>
-                    <p>or click to select files below</p>
+                    <p>or use the file selectors below</p>
                 </div>
 
                 <div class="file-inputs">
-                    <div class="file-input-group">
+                    <div class="file-input-group" id="fg-trajectory">
                         <label>Trajectory <span class="required">*</span></label>
                         <input type="file" id="file-trajectory" accept=".xtc,.trr">
-                        <div class="accepted">.xtc, .trr</div>
+                        <div class="file-meta">
+                            <span class="accepted">.xtc, .trr</span>
+                            <span class="file-status" id="status-trajectory"></span>
+                        </div>
                     </div>
-                    <div class="file-input-group">
+                    <div class="file-input-group" id="fg-topology">
                         <label>Topology</label>
                         <input type="file" id="file-topology" accept=".tpr">
-                        <div class="accepted">.tpr</div>
+                        <div class="file-meta">
+                            <span class="accepted">.tpr</span>
+                            <span class="file-status" id="status-topology"></span>
+                        </div>
                     </div>
-                    <div class="file-input-group">
+                    <div class="file-input-group" id="fg-structure">
                         <label>Structure <span class="required">*</span></label>
                         <input type="file" id="file-structure" accept=".pdb,.gro">
-                        <div class="accepted">.pdb, .gro</div>
+                        <div class="file-meta">
+                            <span class="accepted">.pdb, .gro</span>
+                            <span class="file-status" id="status-structure"></span>
+                        </div>
                     </div>
-                    <div class="file-input-group">
-                        <label>Reference (Optional)</label>
+                    <div class="file-input-group" id="fg-reference">
+                        <label>Reference <span class="optional-tag">optional</span></label>
                         <input type="file" id="file-reference" accept=".pdb,.gro">
-                        <div class="accepted">.pdb, .gro</div>
+                        <div class="file-meta">
+                            <span class="accepted">.pdb, .gro</span>
+                            <span class="file-status" id="status-reference"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    <h2>Analysis Options</h2>
+                </div>
+                <div class="options-panel">
+                    <label class="toggle-option">
+                        <input type="checkbox" id="opt-gnn" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Graph Neural Network</span>
+                    </label>
+                    <label class="toggle-option">
+                        <input type="checkbox" id="opt-transformer" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Transformer Analysis</span>
+                    </label>
+                    <label class="toggle-option">
+                        <input type="checkbox" id="opt-msm" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Markov State Model</span>
+                    </label>
+                    <div class="ligand-input-wrap">
+                        <label for="opt-ligand">Ligand selection</label>
+                        <input type="text" id="opt-ligand" placeholder="e.g., resname LIG">
                     </div>
                 </div>
 
-                <div class="card" style="margin-top: 20px;">
-                    <h2>⚙️ Analysis Options</h2>
-                    <div class="options-panel">
-                        <div class="option-item">
-                            <input type="checkbox" id="opt-gnn" checked>
-                            <label for="opt-gnn">Graph Neural Network</label>
+                <details class="advanced-toggle">
+                    <summary>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="4 17 10 11 4 5" />
+                            <line x1="12" y1="19" x2="20" y2="19" />
+                        </svg>
+                        Advanced Parameters
+                    </summary>
+                    <div class="advanced-params">
+                        <div class="param-section">
+                            <div class="param-section-header">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="22" y1="12" x2="18" y2="12" />
+                                    <line x1="6" y1="12" x2="2" y2="12" />
+                                    <line x1="12" y1="6" x2="12" y2="2" />
+                                    <line x1="12" y1="22" x2="12" y2="18" />
+                                </svg>
+                                <span>Frame Range</span>
+                            </div>
+                            <div class="param-grid cols-2">
+                                <div class="param-card">
+                                    <div class="param-label">Start Frame</div>
+                                    <input type="number" id="opt-start-frame" placeholder="0" min="0">
+                                    <div class="param-hint">First frame to analyze</div>
+                                </div>
+                                <div class="param-card">
+                                    <div class="param-label">End Frame</div>
+                                    <input type="number" id="opt-end-frame" placeholder="All">
+                                    <div class="param-hint">Last frame (blank = all)</div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="option-item">
-                            <input type="checkbox" id="opt-transformer" checked>
-                            <label for="opt-transformer">Transformer Analysis</label>
+                        <div class="param-section">
+                            <div class="param-section-header">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round">
+                                    <path d="M2 12h5l2-9 6 18 2-9h5" />
+                                </svg>
+                                <span>Distance Cutoffs</span>
+                            </div>
+                            <div class="param-grid cols-3">
+                                <div class="param-card">
+                                    <div class="param-label">H-Bond</div>
+                                    <div class="param-input-wrap">
+                                        <input type="number" id="opt-hbond-cutoff" value="3.5" step="0.1" min="2"
+                                            max="5">
+                                        <span class="param-unit">&#197;</span>
+                                    </div>
+                                </div>
+                                <div class="param-card">
+                                    <div class="param-label">Contact</div>
+                                    <div class="param-input-wrap">
+                                        <input type="number" id="opt-contact-cutoff" value="8.0" step="0.5" min="4"
+                                            max="15">
+                                        <span class="param-unit">&#197;</span>
+                                    </div>
+                                </div>
+                                <div class="param-card">
+                                    <div class="param-label">Salt Bridge</div>
+                                    <div class="param-input-wrap">
+                                        <input type="number" id="opt-salt-cutoff" value="4.0" step="0.1" min="2"
+                                            max="6">
+                                        <span class="param-unit">&#197;</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="option-item">
-                            <input type="checkbox" id="opt-msm" checked>
-                            <label for="opt-msm">Markov State Model</label>
+                        <div class="param-section">
+                            <div class="param-section-header">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <path d="M14 2v6h6" />
+                                    <line x1="16" y1="13" x2="8" y2="13" />
+                                    <line x1="16" y1="17" x2="8" y2="17" />
+                                    <polyline points="10 9 9 9 8 9" />
+                                </svg>
+                                <span>Simulation Parameters</span>
+                            </div>
+                            <div class="param-grid cols-3">
+                                <div class="param-card">
+                                    <div class="param-label">FEL Bins</div>
+                                    <div class="param-input-wrap">
+                                        <input type="number" id="opt-fel-bins" value="50" min="10" max="200">
+                                        <span class="param-unit">#</span>
+                                    </div>
+                                </div>
+                                <div class="param-card">
+                                    <div class="param-label">Temperature</div>
+                                    <div class="param-input-wrap">
+                                        <input type="number" id="opt-temperature" value="300" step="1" min="200"
+                                            max="500">
+                                        <span class="param-unit">K</span>
+                                    </div>
+                                </div>
+                                <div class="param-card">
+                                    <div class="param-label">MSM Lag Time</div>
+                                    <div class="param-input-wrap">
+                                        <input type="number" id="opt-msm-lag" value="5" min="1" max="100">
+                                        <span class="param-unit">&tau;</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="option-item" style="grid-column: span 2;">
-                            <label for="opt-ligand" style="min-width: 120px;">Ligand selection:</label>
-                            <input type="text" id="opt-ligand" placeholder="e.g., resname LIG">
+                        <div class="param-section">
+                            <div class="param-section-header">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round">
+                                    <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10h16V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z" />
+                                    <circle cx="12" cy="15" r="2" />
+                                </svg>
+                                <span>ML / Deep Learning</span>
+                            </div>
+                            <div class="param-grid cols-3">
+                                <div class="param-card">
+                                    <div class="param-label">Grid Spacing</div>
+                                    <div class="param-input-wrap">
+                                        <input type="number" id="opt-grid-spacing" value="2.0" step="0.5" min="0.5"
+                                            max="5">
+                                        <span class="param-unit">&#197;</span>
+                                    </div>
+                                </div>
+                                <div class="param-card">
+                                    <div class="param-label">DCCM Threshold</div>
+                                    <div class="param-input-wrap">
+                                        <input type="number" id="opt-corr-threshold" value="0.5" step="0.05" min="0.1"
+                                            max="1">
+                                        <span class="param-unit">|r|</span>
+                                    </div>
+                                </div>
+                                <div class="param-card">
+                                    <div class="param-label">VAE Latent Dim</div>
+                                    <div class="param-input-wrap">
+                                        <input type="number" id="opt-vae-dim" value="2" min="2" max="32">
+                                        <span class="param-unit">d</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                </details>
+            </div>
 
-                    <details class="advanced-toggle">
-                        <summary>🔧 Advanced Parameters</summary>
-                        <div class="advanced-params">
-                            <div class="param-section">
-                                <div class="param-section-header">
-                                    <span class="param-icon">🎯</span>
-                                    <span>Frame Range</span>
-                                </div>
-                                <div class="param-grid cols-2">
-                                    <div class="param-card">
-                                        <div class="param-label">Start Frame</div>
-                                        <input type="number" id="opt-start-frame" placeholder="0" min="0">
-                                        <div class="param-hint">First frame to analyze</div>
-                                    </div>
-                                    <div class="param-card">
-                                        <div class="param-label">End Frame</div>
-                                        <input type="number" id="opt-end-frame" placeholder="All">
-                                        <div class="param-hint">Last frame (blank = all)</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="param-section">
-                                <div class="param-section-header">
-                                    <span class="param-icon">📏</span>
-                                    <span>Distance Cutoffs</span>
-                                </div>
-                                <div class="param-grid cols-3">
-                                    <div class="param-card">
-                                        <div class="param-label">H-Bond</div>
-                                        <div class="param-input-wrap">
-                                            <input type="number" id="opt-hbond-cutoff" value="3.5" step="0.1" min="2" max="5">
-                                            <span class="param-unit">Å</span>
-                                        </div>
-                                    </div>
-                                    <div class="param-card">
-                                        <div class="param-label">Contact</div>
-                                        <div class="param-input-wrap">
-                                            <input type="number" id="opt-contact-cutoff" value="8.0" step="0.5" min="4" max="15">
-                                            <span class="param-unit">Å</span>
-                                        </div>
-                                    </div>
-                                    <div class="param-card">
-                                        <div class="param-label">Salt Bridge</div>
-                                        <div class="param-input-wrap">
-                                            <input type="number" id="opt-salt-cutoff" value="4.0" step="0.1" min="2" max="6">
-                                            <span class="param-unit">Å</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="param-section">
-                                <div class="param-section-header">
-                                    <span class="param-icon">⚗️</span>
-                                    <span>Simulation Parameters</span>
-                                </div>
-                                <div class="param-grid cols-3">
-                                    <div class="param-card">
-                                        <div class="param-label">FEL Bins</div>
-                                        <div class="param-input-wrap">
-                                            <input type="number" id="opt-fel-bins" value="50" min="10" max="200">
-                                            <span class="param-unit">#</span>
-                                        </div>
-                                    </div>
-                                    <div class="param-card">
-                                        <div class="param-label">Temperature</div>
-                                        <div class="param-input-wrap">
-                                            <input type="number" id="opt-temperature" value="300" step="1" min="200" max="500">
-                                            <span class="param-unit">K</span>
-                                        </div>
-                                    </div>
-                                    <div class="param-card">
-                                        <div class="param-label">MSM Lag Time</div>
-                                        <div class="param-input-wrap">
-                                            <input type="number" id="opt-msm-lag" value="5" min="1" max="100">
-                                            <span class="param-unit">τ</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="param-section">
-                                <div class="param-section-header">
-                                    <span class="param-icon">🧠</span>
-                                    <span>ML / Deep Learning</span>
-                                </div>
-                                <div class="param-grid cols-3">
-                                    <div class="param-card">
-                                        <div class="param-label">Grid Spacing</div>
-                                        <div class="param-input-wrap">
-                                            <input type="number" id="opt-grid-spacing" value="2.0" step="0.5" min="0.5" max="5">
-                                            <span class="param-unit">Å</span>
-                                        </div>
-                                    </div>
-                                    <div class="param-card">
-                                        <div class="param-label">DCCM Threshold</div>
-                                        <div class="param-input-wrap">
-                                            <input type="number" id="opt-corr-threshold" value="0.5" step="0.05" min="0.1" max="1">
-                                            <span class="param-unit">|r|</span>
-                                        </div>
-                                    </div>
-                                    <div class="param-card">
-                                        <div class="param-label">VAE Latent Dim</div>
-                                        <div class="param-input-wrap">
-                                            <input type="number" id="opt-vae-dim" value="2" min="2" max="32">
-                                            <span class="param-unit">d</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </details>
-                </div>
-
-                <div class="upload-actions">
-                    <button class="btn btn-primary" id="btn-upload" onclick="uploadAndAnalyze()">
-                        🚀 Upload &amp; Analyze
-                    </button>
-                </div>
+            <div class="upload-actions">
+                <button class="btn btn-primary btn-lg" id="btn-upload" onclick="uploadAndAnalyze()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 2L11 13" />
+                        <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                    </svg>
+                    Upload & Analyze
+                </button>
             </div>
         </section>
 
         <!-- ===== Progress Section ===== -->
         <section id="section-progress" class="section">
             <div class="card">
-                <h2>⏳ Analysis Progress</h2>
-                <div class="progress-container">
-                    <div class="progress-header">
-                        <span class="progress-module" id="progress-module">Waiting...</span>
-                        <span class="progress-percent" id="progress-percent">0%</span>
-                    </div>
-                    <div class="progress-bar-wrapper">
-                        <div class="progress-bar" id="progress-bar"></div>
-                    </div>
-                    <p class="progress-message" id="progress-message">Preparing analysis pipeline...</p>
-                    <div class="progress-log" id="progress-log"></div>
+                <div class="card-header">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                    <h2>Analysis Progress</h2>
                 </div>
+                <div class="progress-container">
+                    <div class="progress-ring-wrap">
+                        <svg class="progress-ring" width="120" height="120" viewBox="0 0 120 120">
+                            <circle class="progress-ring-bg" cx="60" cy="60" r="52" />
+                            <circle class="progress-ring-fill" id="progress-ring-fill" cx="60" cy="60" r="52" />
+                        </svg>
+                        <div class="progress-ring-text" id="progress-ring-text">0%</div>
+                    </div>
+                    <div class="progress-details">
+                        <div class="progress-header">
+                            <span class="progress-module" id="progress-module">Waiting...</span>
+                        </div>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" id="progress-bar"></div>
+                        </div>
+                        <p class="progress-message" id="progress-message">Preparing analysis pipeline...</p>
+                    </div>
+                </div>
+                <div class="progress-log" id="progress-log"></div>
             </div>
         </section>
 
         <!-- ===== Results Section ===== -->
         <section id="section-results" class="section">
             <div class="card">
-                <h2>📊 Trajectory Statistics</h2>
+                <div class="card-header">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="20" x2="18" y2="10" />
+                        <line x1="12" y1="20" x2="12" y2="4" />
+                        <line x1="6" y1="20" x2="6" y2="14" />
+                    </svg>
+                    <h2>Trajectory Statistics</h2>
+                </div>
                 <div class="stats-grid" id="stats-grid"></div>
             </div>
 
             <div class="card">
-                <h2>📈 Analysis Plots</h2>
+                <div class="card-header">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                    </svg>
+                    <h2>Analysis Plots</h2>
+                </div>
                 <div class="plot-tabs" id="plot-tabs"></div>
                 <div class="plot-container" id="plot-container"></div>
             </div>
@@ -240,7 +427,13 @@
         <!-- ===== Insights Section ===== -->
         <section id="section-insights" class="section">
             <div class="card">
-                <h2>🧠 AI-Generated Biological Insights</h2>
+                <div class="card-header">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-yellow)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 12 18.469a3.374 3.374 0 0 0-.834-1.373z" />
+                    </svg>
+                    <h2>AI-Generated Biological Insights</h2>
+                </div>
                 <div class="insights-list" id="insights-list"></div>
             </div>
         </section>
@@ -248,9 +441,25 @@
         <!-- ===== 3D Viewer Section ===== -->
         <section id="section-viewer" class="section">
             <div class="card">
-                <h2>🔬 Interactive 3D Structure Viewer</h2>
+                <div class="card-header">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-pink)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <h2>Interactive 3D Structure Viewer</h2>
+                </div>
                 <div class="viewer-container">
-                    <div class="viewer-3d" id="viewer-3d"></div>
+                    <div class="viewer-3d" id="viewer-3d">
+                        <div class="viewer-placeholder" id="viewer-placeholder">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)"
+                                stroke-width="1" stroke-linecap="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                            <p>Structure will appear after analysis</p>
+                        </div>
+                    </div>
                     <div class="viewer-controls">
                         <div class="control-group">
                             <h4>Representation</h4>
@@ -314,31 +523,82 @@
         <!-- ===== Downloads Section ===== -->
         <section id="section-downloads" class="section">
             <div class="card">
-                <h2>📥 Download Reports</h2>
+                <div class="card-header">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-orange)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    <h2>Download Reports</h2>
+                </div>
                 <div class="download-grid">
                     <div class="download-card" onclick="downloadReport('html')">
-                        <div class="icon">📄</div>
-                        <div class="label">HTML Report</div>
-                        <div class="desc">Full analysis with interactive plots</div>
+                        <div class="download-icon download-html">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                        </div>
+                        <div class="download-info">
+                            <div class="download-label">HTML Report</div>
+                            <div class="download-desc">Full analysis with interactive plots</div>
+                        </div>
                     </div>
                     <div class="download-card" onclick="downloadReport('csv')">
-                        <div class="icon">📊</div>
-                        <div class="label">CSV Metrics</div>
-                        <div class="desc">Comprehensive numerical data export</div>
+                        <div class="download-icon download-csv">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="8" y1="13" x2="16" y2="13" />
+                                <line x1="8" y1="17" x2="16" y2="17" />
+                                <line x1="12" y1="9" x2="12" y2="21" />
+                            </svg>
+                        </div>
+                        <div class="download-info">
+                            <div class="download-label">CSV Metrics</div>
+                            <div class="download-desc">Comprehensive numerical data export</div>
+                        </div>
                     </div>
                     <div class="download-card" onclick="downloadReport('pdf')">
-                        <div class="icon">📕</div>
-                        <div class="label">PDF Report</div>
-                        <div class="desc">Publication-ready report with plots</div>
+                        <div class="download-icon download-pdf">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <path d="M9 15v-2h2a1 1 0 0 1 0 2H9z" />
+                            </svg>
+                        </div>
+                        <div class="download-info">
+                            <div class="download-label">PDF Report</div>
+                            <div class="download-desc">Publication-ready report with plots</div>
+                        </div>
                     </div>
                     <div class="download-card" onclick="downloadReport('json')">
-                        <div class="icon">🔧</div>
-                        <div class="label">JSON Results</div>
-                        <div class="desc">Complete machine-readable results</div>
+                        <div class="download-icon download-json">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round">
+                                <polyline points="16 18 22 12 16 6" />
+                                <polyline points="8 6 2 12 8 18" />
+                            </svg>
+                        </div>
+                        <div class="download-info">
+                            <div class="download-label">JSON Results</div>
+                            <div class="download-desc">Complete machine-readable results</div>
+                        </div>
                     </div>
                 </div>
             </div>
         </section>
+
+        <!-- ===== Footer ===== -->
+        <footer class="footer">
+            <p>MD AI Analyzer &mdash; Advanced Molecular Dynamics Analysis Platform</p>
+        </footer>
     </div>
 
     <script src="/static/app.js"></script>
