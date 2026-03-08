@@ -1,17 +1,17 @@
-# 🧬 MD AI Analyzer
+# MD AI Analyzer
 
 **AI-Powered Molecular Dynamics Trajectory Analysis Platform**
 
-An advanced local platform that analyzes GROMACS MD simulation outputs using classical MD metrics, machine learning, graph neural networks, transformers, and biological inference — then explains the biology behind the motions.
+An advanced local platform that analyzes GROMACS MD simulation outputs using classical MD metrics, machine learning, graph neural networks, transformers, variational autoencoders, and biological inference — then explains the biology behind the motions.
 
 ---
 
 ## Features
 
-### Classical MD Analysis
+### Classical MD Analysis (17 modules)
 - RMSD, RMSF, Radius of Gyration
 - Secondary Structure Evolution (DSSP)
-- Hydrogen Bonds, Salt Bridges
+- Hydrogen Bonds, Salt Bridges, Water Bridges
 - Contact Maps & Distance Matrices
 - Principal Component Analysis (PCA)
 - Dynamic Cross-Correlation Matrix (DCCM)
@@ -19,14 +19,24 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
 - Free Energy Landscape
 - Solvent Accessible Surface Area (SASA)
 - Time-lagged Independent Component Analysis (tICA)
+- Normal Mode Analysis (ANM-based B-factors, mode collectivity)
+- Perturbation Response Scanning (effector/sensor identification)
+- Energy Decomposition (per-residue LJ + Coulomb)
+- Configurational Entropy (Schlitter's method)
+- Convergence Assessment (block averaging, autocorrelation, cosine content)
+- Binding Kinetics (residence time, kon/koff, contact survival — ligand-dependent)
 
-### Machine Learning
+### Machine Learning (10 modules)
 - Conformational State Discovery (HDBSCAN / GMM / KMeans)
 - Markov State Models (transition matrix, MFPT, timescales)
 - Allosteric Pathway Detection (graph centrality, community detection)
 - Dynamic Domain Detection (spectral clustering)
 - Ligand Interaction Analysis
 - Dimensionality Reduction (PCA / UMAP / t-SNE)
+- Interaction Fingerprints (hydrophobic, salt bridge, aromatic contacts)
+- Tunnel & Cavity Detection (grid-based probe + Delaunay tessellation)
+- Dynamic Network Analysis (time-windowed DCCM, community evolution)
+- VAE Latent Space Analysis (variational autoencoder for conformational landscapes)
 
 ### Deep Learning
 - **Graph Neural Networks** (GAT + GCN hybrid via PyTorch Geometric)
@@ -37,26 +47,68 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
   - Structural transition detection
   - Temporal importance scoring
   - Per-residue dynamic attribution via gradient analysis
+- **Variational Autoencoder** (configurable latent dimension)
+  - Conformational landscape mapping
+  - Reconstruction quality assessment
+  - Latent density estimation
 
 ### AI Biological Inference Engine
-Automatically generates interpretations including:
+Automatically generates 38 types of biological interpretations, including:
+
+**Structural:**
 - Hinge residue detection
 - Flexible loop identification
 - Stable core classification
-- Allosteric communication pathways
-- Binding pocket dynamics
+- Local stiffness mapping
+
+**Dynamic:**
 - Conformational transition analysis
+- Breathing motions & cracking events
 - Domain motion interpretation
+- NMA collective motion characterization
+- Entropy estimation
+- Dynamic network evolution
+
+**Allosteric & Communication:**
+- Allosteric communication pathways
+- Force propagation pathways
+- PRS effector/sensor identification
+- Communication hub detection
+- H-bond network rewiring
+
+**Binding & Functional:**
+- Binding pocket dynamics
+- Cryptic binding site detection
+- Druggability scoring
+- Ligand binding kinetics interpretation
+- PPI interface hotspots
+- Tunnel/cavity characterization
+
+**Stability & Prediction:**
 - Overall stability assessment
-- GNN and Transformer insight interpretation
+- Convergence assessment
+- Mutation sensitivity prediction
+- Stability change prediction
+- Aggregation-prone region detection
+- PTM site prediction
+
+**Deep Learning Insights:**
+- GNN key residue interpretation
+- Transformer transition interpretation
+- VAE conformational landscape interpretation
 
 ### Interactive Web Interface
 - File upload with drag & drop
 - Real-time SSE progress streaming
-- Interactive Plotly charts (15 plot types)
-- 3D molecular viewer (3Dmol.js)
-- Residue highlighting (flexible, hinge, hubs, GNN top)
-- HTML/CSV/JSON report downloads
+- Interactive Plotly charts (31 plot types)
+- 3D molecular viewer (3Dmol.js) with 5 representations and 4 coloring modes
+- 13 residue highlight modes:
+  - *Structural:* Flexible, Hinge, Stable Core, Stiff Residues
+  - *Functional:* Communication Hubs, GNN Top Residues, Mutation-Sensitive, PTM Sites
+  - *Binding:* Cryptic Binding Sites, PPI Hotspots, Druggable Pockets
+  - *Other:* Aggregation-Prone, Electrostatic Funnels
+- Advanced parameter configuration (frame range, distance cutoffs, simulation parameters, ML settings)
+- HTML/CSV/JSON/PDF report downloads
 
 ---
 
@@ -88,11 +140,11 @@ Navigate to: **http://localhost:8000**
 ### 4. Upload & Analyze
 
 1. Upload your GROMACS files (trajectory + structure)
-2. Configure analysis options (GNN, Transformer, MSM)
+2. Configure analysis options (GNN, Transformer, MSM, advanced parameters)
 3. Click "Upload & Analyze"
 4. Watch real-time progress
 5. Explore interactive results and biological insights
-6. Download reports (HTML/CSV/JSON)
+6. Download reports (HTML/CSV/JSON/PDF)
 
 ---
 
@@ -107,6 +159,24 @@ Navigate to: **http://localhost:8000**
 
 ---
 
+## Configurable Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| Start/End Frame | — | Analyze a subtrajectory |
+| H-bond Cutoff | 3.5 A | Hydrogen bond distance threshold |
+| Contact Cutoff | 8.0 A | Contact map distance threshold |
+| Salt Bridge Cutoff | 4.0 A | Salt bridge distance threshold |
+| FEL Bins | 50 | Free energy landscape grid resolution |
+| Temperature | 300 K | For entropy and free energy calculations |
+| MSM Lag Time | 5 | Markov state model lag time (frames) |
+| Grid Spacing | 2.0 A | Tunnel/cavity detection grid resolution |
+| DCCM Threshold | 0.5 | Correlation threshold for network edges |
+| VAE Latent Dim | 2 | Variational autoencoder latent dimensions |
+| Ligand Selection | — | MDAnalysis selection string for ligand |
+
+---
+
 ## Project Structure
 
 ```
@@ -118,36 +188,73 @@ md_ai_analyzer/
 │   ├── config.py                   # Configuration & GPU detection
 │   ├── models.py                   # Pydantic schemas
 │   ├── orchestrator.py             # Analysis pipeline manager
-│   ├── analysis/                   # Classical MD analysis modules
-│   │   ├── rmsd.py, rmsf.py, radius_of_gyration.py
-│   │   ├── secondary_structure.py, hbonds.py, salt_bridges.py
-│   │   ├── contacts.py, pca.py, dccm.py
-│   │   ├── clustering.py, free_energy.py
-│   │   ├── sasa.py, tica.py
-│   ├── ml/                         # Machine learning modules
-│   │   ├── state_discovery.py      # HDBSCAN/GMM clustering
+│   ├── analysis/                   # Classical MD analysis (17 modules)
+│   │   ├── rmsd.py                 # Root mean square deviation
+│   │   ├── rmsf.py                 # Root mean square fluctuation
+│   │   ├── radius_of_gyration.py   # Radius of gyration
+│   │   ├── secondary_structure.py  # DSSP secondary structure
+│   │   ├── hbonds.py               # Hydrogen bond analysis
+│   │   ├── salt_bridges.py         # Salt bridge detection
+│   │   ├── water_bridges.py        # Water-mediated bridges
+│   │   ├── contacts.py             # Contact map computation
+│   │   ├── pca.py                  # Principal component analysis
+│   │   ├── dccm.py                 # Dynamic cross-correlation
+│   │   ├── clustering.py           # Conformational clustering
+│   │   ├── free_energy.py          # Free energy landscape
+│   │   ├── sasa.py                 # Solvent accessible surface area
+│   │   ├── tica.py                 # Time-lagged ICA
+│   │   ├── nma.py                  # Normal mode analysis (ANM)
+│   │   ├── prs.py                  # Perturbation response scanning
+│   │   ├── energy_decomposition.py # Per-residue energy decomposition
+│   │   ├── entropy.py              # Configurational entropy
+│   │   ├── convergence.py          # Simulation convergence assessment
+│   │   └── binding_kinetics.py     # Ligand binding kinetics
+│   ├── ml/                         # Machine learning (10 modules)
+│   │   ├── state_discovery.py      # HDBSCAN/GMM/KMeans clustering
 │   │   ├── msm.py                  # Markov State Models
-│   │   ├── allosteric.py           # Network analysis
-│   │   ├── domain_detection.py     # Spectral clustering
-│   │   ├── ligand_analysis.py      # Ligand contacts
-│   │   ├── dimensionality.py       # UMAP/t-SNE
+│   │   ├── allosteric.py           # Allosteric network analysis
+│   │   ├── domain_detection.py     # Spectral domain detection
+│   │   ├── ligand_analysis.py      # Ligand contact analysis
+│   │   ├── dimensionality.py       # UMAP/t-SNE reduction
+│   │   ├── interaction_fingerprints.py # Interaction fingerprints
+│   │   ├── tunnel_detection.py     # Cavity/tunnel detection
+│   │   ├── dynamic_network.py      # Time-windowed network analysis
+│   │   └── vae_latent.py           # Variational autoencoder
 │   ├── gnn_models/                 # Graph Neural Networks
 │   │   └── residue_gnn.py          # GAT+GCN hybrid
 │   ├── transformer_models/         # Transformer architectures
 │   │   └── trajectory_transformer.py
 │   ├── bio_inference/              # Biological interpretation
-│   │   └── engine.py
+│   │   └── engine.py               # 38 insight types
 │   └── visualization/              # Plotting & reports
-│       ├── plots.py                # 15 Plotly chart generators
-│       └── report_generator.py     # HTML & CSV reports
+│       ├── plots.py                # 31 Plotly chart generators
+│       └── report_generator.py     # HTML, CSV & PDF reports
 ├── frontend/
 │   ├── index.html                  # Main SPA
 │   ├── style.css                   # Dark theme design system
 │   └── app.js                      # Application logic
-├── uploads/                        # Uploaded files
-├── results/                        # Analysis outputs
-└── reports/                        # Generated reports
+├── uploads/                        # Uploaded files (gitignored)
+└── results/                        # Analysis outputs (gitignored)
 ```
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Serve frontend |
+| `GET` | `/api/health` | System info, GPU status, dependency check |
+| `POST` | `/api/upload` | Upload trajectory/topology/structure files |
+| `POST` | `/api/analyze` | Start analysis pipeline |
+| `GET` | `/api/progress/{job_id}` | SSE real-time progress stream |
+| `GET` | `/api/results/{job_id}` | Fetch analysis results (JSON) |
+| `GET` | `/api/report/{job_id}` | Download HTML report |
+| `GET` | `/api/csv/{job_id}` | Download CSV metrics |
+| `GET` | `/api/pdf/{job_id}` | Download PDF report |
+| `GET` | `/api/structure/{job_id}` | Fetch structure file for 3D viewer |
+
+**Security:** Rate limiting (60 req/min per IP), security headers, request ID tracking, input validation and filename sanitization.
 
 ---
 
