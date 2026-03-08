@@ -17,3 +17,17 @@ from .energy_decomposition import compute_energy_decomposition
 from .prs import compute_prs
 from .nma import compute_nma
 from .entropy import compute_entropy
+from .convergence import compute_convergence
+from .binding_kinetics import compute_binding_kinetics
+
+__all__ = [
+    "compute_rmsd", "compute_rmsf", "compute_rg",
+    "compute_secondary_structure", "compute_hbonds",
+    "compute_salt_bridges", "compute_contact_map",
+    "compute_pca", "compute_dccm", "cluster_conformations",
+    "compute_free_energy_landscape", "compute_sasa",
+    "compute_tica", "compute_water_bridges",
+    "compute_energy_decomposition", "compute_prs",
+    "compute_nma", "compute_entropy",
+    "compute_convergence", "compute_binding_kinetics",
+]

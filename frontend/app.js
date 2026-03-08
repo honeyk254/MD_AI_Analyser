@@ -276,13 +276,13 @@ function renderStats() {
 // ===== Plots =====
 const plotNameMap = {
     rmsd_plot: 'RMSD', rmsf_plot: 'RMSF', rg_plot: 'Rg', ss_plot: 'Sec. Struct.',
-    hbond_plot: 'H-Bonds', contact_map: 'Contacts', pca_plot: 'PCA',
+    hbond_plot: 'H-Bonds', salt_bridges_plot: 'Salt Bridges', contact_map: 'Contacts', pca_plot: 'PCA',
     dccm_plot: 'DCCM', fel_plot: 'Free Energy', clustering_plot: 'Clusters',
     sasa_plot: 'SASA', dimensionality_plot: 'Dim. Reduction',
     dimensionality_3d_plot: '3D Projections',
     gnn_plot: 'GNN', transformer_plot: 'Transformer', msm_plot: 'MSM',
     // Part A
-    water_bridges_plot: 'Water Bridges', energy_plot: 'Energy Decomp.',
+    tica_plot: 'tICA', water_bridges_plot: 'Water Bridges', energy_plot: 'Energy Decomp.',
     prs_plot: 'PRS', nma_plot: 'Normal Modes', entropy_plot: 'Entropy',
     ifp_plot: 'Interaction FP', tunnel_plot: 'Tunnels/Cavities',
     vae_plot: 'VAE Latent', dynamic_network_plot: 'Dynamic Network',
@@ -337,25 +337,80 @@ const categoryColors = {
     binding: '#ffd93d', transition: '#fd79a8',
 };
 
+const categoryLabels = {
+    structural: 'Structural', dynamic: 'Dynamic', allosteric: 'Allosteric',
+    binding: 'Binding', transition: 'Transition',
+};
+
+const insightTypeLabels = {
+    // Original
+    hinge_residue: 'Hinge Residue', flexible_loop: 'Flexible Loop', stable_core: 'Stable Core',
+    allosteric_pathway: 'Allosteric Pathway', communication_hub: 'Communication Hub',
+    binding_pocket: 'Binding Pocket', conformational_states: 'Conformational States',
+    metastable_kinetics: 'Metastable Kinetics', domain_motion: 'Domain Motion',
+    stability_assessment: 'Stability Assessment', gnn_key_residues: 'GNN Key Residues',
+    transformer_transitions: 'Transformer Transitions',
+    // Part A
+    water_bridge_sites: 'Water Bridge Sites', energy_hotspot: 'Energy Hotspot',
+    prs_effectors_sensors: 'PRS Effectors/Sensors', nma_collective_motion: 'NMA Collective Motion',
+    entropy_estimate: 'Entropy Estimate', cavity_channels: 'Cavity Channels',
+    dynamic_network_evolution: 'Dynamic Network', vae_conformational_landscape: 'VAE Landscape',
+    interaction_fingerprint: 'Interaction Fingerprint',
+    // Part B — New
+    breathing_motion: 'Breathing Motion', cracking_event: 'Cracking / Local Unfolding',
+    cryptic_binding_site: 'Cryptic Binding Site', druggability_score: 'Druggability Score',
+    ptm_site_prediction: 'PTM Site Prediction', ppi_interface_hotspot: 'PPI Interface Hotspot',
+    interface_conformational_selection: 'Conformational Selection',
+    protonation_dynamics: 'Protonation Dynamics', electrostatic_funnel: 'Electrostatic Funnel',
+    aggregation_prone_region: 'Aggregation-Prone Region', folding_intermediate: 'Folding Intermediate',
+    functional_motion_classification: 'Functional Motion Type', motion_function_coupling: 'Motion-Function Coupling',
+    hbond_network_rewiring: 'H-Bond Network Rewiring', structural_waters: 'Structural Waters',
+    local_stiffness_map: 'Local Stiffness Map', force_propagation_pathway: 'Force Propagation',
+    mutation_sensitivity: 'Mutation Sensitivity', stability_change_prediction: 'Stability Change (ddG)',
+};
+
+let activeInsightFilter = 'all';
+
 function renderInsights() {
     const insights = analysisResults.biological_insights || [];
-    const container = document.getElementById('insights-list');
+    const wrapper = document.getElementById('insights-list');
 
     if (insights.length === 0) {
-        container.innerHTML = '<p style="color:#666;padding:20px;">No biological insights generated. This may indicate the trajectory is too short or lacks protein atoms.</p>';
+        wrapper.innerHTML = '<p style="color:#666;padding:20px;">No biological insights generated. This may indicate the trajectory is too short or lacks protein atoms.</p>';
         return;
     }
 
-    container.innerHTML = insights.map(ins => {
-        const color = categoryColors[ins.category] || '#00d4ff';
+    // Count per category
+    const counts = { all: insights.length };
+    insights.forEach(ins => {
+        const cat = ins.category || 'structural';
+        counts[cat] = (counts[cat] || 0) + 1;
+    });
+
+    // Build filter bar + cards container
+    const categories = ['all', 'structural', 'dynamic', 'allosteric', 'binding', 'transition'];
+    const filterBar = categories
+        .filter(c => c === 'all' || counts[c])
+        .map(c => {
+            const label = c === 'all' ? 'All' : categoryLabels[c] || c;
+            const count = counts[c] || 0;
+            const color = c === 'all' ? 'var(--accent-cyan)' : categoryColors[c] || '#00d4ff';
+            return `<button class="insight-filter-btn ${activeInsightFilter === c ? 'active' : ''}" data-filter="${c}" style="--filter-color:${color}">${label} <span class="filter-count">${count}</span></button>`;
+        }).join('');
+
+    const cards = insights.map(ins => {
+        const cat = ins.category || 'structural';
+        const color = categoryColors[cat] || '#00d4ff';
         const confPct = Math.round((ins.confidence || 0) * 100);
         const evidenceItems = (ins.evidence || []).map(e => `<li>${e}</li>`).join('');
         const residueStr = (ins.residues || []).slice(0, 15).join(', ');
+        const displayType = insightTypeLabels[ins.type] || (ins.type || '').replace(/_/g, ' ');
+        const hidden = activeInsightFilter !== 'all' && cat !== activeInsightFilter;
 
         return `
-        <div class="insight-card cat-${ins.category || 'structural'}">
+        <div class="insight-card cat-${cat}" data-category="${cat}" ${hidden ? 'style="display:none;"' : ''}>
             <div class="insight-header">
-                <span class="insight-type">${(ins.type || '').replace(/_/g, ' ')}</span>
+                <span class="insight-type">${displayType}</span>
                 <span class="confidence">${confPct}%</span>
             </div>
             <div class="confidence-bar-mini">
@@ -366,6 +421,24 @@ function renderInsights() {
             ${evidenceItems ? `<details><summary>Evidence</summary><ul>${evidenceItems}</ul></details>` : ''}
         </div>`;
     }).join('');
+
+    wrapper.innerHTML = `<div class="insight-filters">${filterBar}</div><div class="insight-cards">${cards}</div>`;
+
+    // Bind filter clicks
+    wrapper.querySelectorAll('.insight-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            activeInsightFilter = btn.dataset.filter;
+            wrapper.querySelectorAll('.insight-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            wrapper.querySelectorAll('.insight-card').forEach(card => {
+                if (activeInsightFilter === 'all' || card.dataset.category === activeInsightFilter) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+    });
 }
 
 // ===== 3D Viewer =====
@@ -435,31 +508,78 @@ function highlightResidues() {
     viewer3d.setStyle({}, { [style]: colorObj });
 
     let residues = [];
+    let highlightColor = '#ff6b6b';
+
     switch (option) {
         case 'flexible':
             residues = analysisResults.rmsf?.high_flexibility_residues || [];
+            highlightColor = '#ff6b6b';
             break;
         case 'hinge':
-            const hingeInsights = (analysisResults.biological_insights || [])
-                .filter(i => i.type === 'hinge_residue');
-            residues = hingeInsights.flatMap(i => i.residues || []);
+            residues = getInsightResidues('hinge_residue');
+            highlightColor = '#e17055';
+            break;
+        case 'stable_core':
+            residues = getInsightResidues('stable_core');
+            highlightColor = '#55efc4';
+            break;
+        case 'stiffness':
+            residues = getInsightResidues('local_stiffness_map');
+            highlightColor = '#00b894';
             break;
         case 'hubs':
             residues = (analysisResults.allosteric?.hub_residues || []).map(h => h.resid);
+            highlightColor = '#ff6b6b';
             break;
         case 'gnn':
             residues = (analysisResults.gnn_results?.top_residues || []).map(r => r.resid);
+            highlightColor = '#a29bfe';
+            break;
+        case 'mutation':
+            residues = getInsightResidues('mutation_sensitivity');
+            highlightColor = '#d63031';
+            break;
+        case 'ptm':
+            residues = getInsightResidues('ptm_site_prediction');
+            highlightColor = '#fdcb6e';
+            break;
+        case 'cryptic':
+            residues = getInsightResidues('cryptic_binding_site');
+            highlightColor = '#ffd93d';
+            break;
+        case 'ppi':
+            residues = getInsightResidues('ppi_interface_hotspot');
+            highlightColor = '#fab1a0';
+            break;
+        case 'druggability':
+            residues = getInsightResidues('druggability_score');
+            highlightColor = '#00cec9';
+            break;
+        case 'aggregation':
+            residues = getInsightResidues('aggregation_prone_region');
+            highlightColor = '#e17055';
+            break;
+        case 'electrostatic':
+            residues = getInsightResidues('electrostatic_funnel');
+            highlightColor = '#74b9ff';
             break;
     }
 
     if (residues.length > 0) {
         viewer3d.setStyle({ resi: residues }, {
             [style]: colorObj,
-            sphere: { radius: 0.8, color: '#ff6b6b', opacity: 0.7 },
+            sphere: { radius: 0.8, color: highlightColor, opacity: 0.7 },
         });
     }
 
     viewer3d.render();
+}
+
+function getInsightResidues(insightType) {
+    const insights = analysisResults.biological_insights || [];
+    return insights
+        .filter(i => i.type === insightType)
+        .flatMap(i => i.residues || []);
 }
 
 // ===== Downloads =====

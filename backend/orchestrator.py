@@ -4,6 +4,7 @@ Loads trajectory, runs each module, collects results, emits progress events.
 """
 import asyncio
 import json
+import logging
 import traceback
 import uuid
 import time
@@ -13,8 +14,10 @@ from typing import Dict, Any, Optional, Callable
 
 import MDAnalysis as mda
 
-from .config import UPLOAD_DIR, RESULTS_DIR, REPORTS_DIR, DEVICE, GPU_AVAILABLE
+from .config import UPLOAD_DIR, RESULTS_DIR, REPORTS_DIR, DEVICE, GPU_AVAILABLE, JOB_TTL_SECONDS
 from .models import AnalysisStatus, AnalysisResult
+
+logger = logging.getLogger("md_ai_analyzer")
 
 
 class AnalysisOrchestrator:
@@ -23,6 +26,44 @@ class AnalysisOrchestrator:
     def __init__(self):
         self.jobs: Dict[str, Dict[str, Any]] = {}
         self.progress_callbacks: Dict[str, list] = {}
+        self._tasks: Dict[str, asyncio.Task] = {}
+
+    def store_task(self, job_id: str, task: asyncio.Task):
+        """Store an asyncio task reference to prevent GC and allow cancellation."""
+        self._tasks[job_id] = task
+        task.add_done_callback(lambda t: self._on_task_done(job_id, t))
+
+    def _on_task_done(self, job_id: str, task: asyncio.Task):
+        """Handle task completion/failure."""
+        self._tasks.pop(job_id, None)
+        if task.cancelled():
+            logger.warning("Task cancelled: job_id=%s", job_id)
+        elif task.exception():
+            logger.error("Task exception for job %s: %s", job_id, task.exception())
+
+    def cleanup_expired_jobs(self):
+        """Remove jobs older than JOB_TTL_SECONDS to prevent memory leaks."""
+        now = time.time()
+        expired = [
+            jid for jid, job in self.jobs.items()
+            if job.get("created_at", now) + JOB_TTL_SECONDS < now
+            and job["status"] in (AnalysisStatus.COMPLETED, AnalysisStatus.FAILED)
+        ]
+        for jid in expired:
+            self.jobs.pop(jid, None)
+            self.progress_callbacks.pop(jid, None)
+            self._tasks.pop(jid, None)
+            logger.info("Cleaned up expired job: %s", jid)
+        return len(expired)
+
+    _bio_engine = None
+
+    def _get_bio_engine(self):
+        """Lazy-init singleton for the biological inference engine."""
+        if self._bio_engine is None:
+            from .bio_inference.engine import BiologicalInferenceEngine
+            self._bio_engine = BiologicalInferenceEngine()
+        return self._bio_engine
 
     def create_job(self, files: Dict[str, str]) -> str:
         job_id = str(uuid.uuid4())[:8]
@@ -36,7 +77,9 @@ class AnalysisOrchestrator:
             "current_module": "",
             "message": "Job created",
             "job_dir": str(job_dir),
+            "created_at": time.time(),
         }
+        logger.info("Job created: %s", job_id)
         return job_id
 
     def get_job(self, job_id: str) -> Optional[Dict]:
@@ -143,17 +186,15 @@ class AnalysisOrchestrator:
                     setattr(result, name, module_result)
                 except Exception as e:
                     setattr(result, name, {"error": str(e)})
-                    print(f"[WARN] Module {name} failed: {e}")
+                    logger.warning("Module %s failed: %s", name, e)
 
             # ── Biological inference ────────────────────────────
             await self.emit_progress(job_id, "bio_inference", 95, "Generating biological insights...")
             try:
-                from .bio_inference.engine import BiologicalInferenceEngine
-                engine = BiologicalInferenceEngine()
-                insights = engine.interpret(result)
+                insights = self._get_bio_engine().interpret(result)
                 result.biological_insights = insights
             except Exception as e:
-                print(f"[WARN] Biological inference failed: {e}")
+                logger.warning("Biological inference failed: %s", e)
                 result.biological_insights = []
 
             # ── Generate plots ──────────────────────────────────
@@ -163,7 +204,7 @@ class AnalysisOrchestrator:
                 plots = generate_all_plots(result)
                 result.plots = plots
             except Exception as e:
-                print(f"[WARN] Plot generation failed: {e}")
+                logger.warning("Plot generation failed: %s", e)
 
             # ── Generate report ─────────────────────────────────
             await self.emit_progress(job_id, "report", 99, "Generating report...")
@@ -174,7 +215,7 @@ class AnalysisOrchestrator:
                 result.plots["report_html"] = str(report_path)
                 result.plots["csv_metrics"] = str(csv_path)
             except Exception as e:
-                print(f"[WARN] Report generation failed: {e}")
+                logger.warning("Report generation failed: %s", e)
 
             result.status = AnalysisStatus.COMPLETED
             job["status"] = AnalysisStatus.COMPLETED
@@ -183,7 +224,7 @@ class AnalysisOrchestrator:
 
         except Exception as e:
             tb = traceback.format_exc()
-            print(f"[ERROR] Analysis failed:\n{tb}")
+            logger.error("Analysis failed:\n%s", tb)
             result.status = AnalysisStatus.FAILED
             job["status"] = AnalysisStatus.FAILED
             job["result"] = result
@@ -279,7 +320,7 @@ class AnalysisOrchestrator:
                 from .gnn_models.residue_gnn import run_gnn_analysis
                 modules.append(("gnn_results", run_gnn_analysis, {}))
             except ImportError:
-                print("[WARN] PyTorch Geometric not available, skipping GNN")
+                logger.warning("PyTorch Geometric not available, skipping GNN")
 
         # Transformer
         if run_transformer:
@@ -287,7 +328,7 @@ class AnalysisOrchestrator:
                 from .transformer_models.trajectory_transformer import run_transformer_analysis
                 modules.append(("transformer_results", run_transformer_analysis, {}))
             except ImportError:
-                print("[WARN] Transformer model skipped")
+                logger.warning("Transformer model skipped")
 
         # VAE (requires PyTorch)
         try:
@@ -296,7 +337,9 @@ class AnalysisOrchestrator:
                 "latent_dim": p.get("vae_latent_dim", 2),
             }))
         except ImportError:
-            print("[WARN] PyTorch not available, skipping VAE")
+            logger.warning("PyTorch not available, skipping VAE")
+
+        return modules
 
         return modules
 

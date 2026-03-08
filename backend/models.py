@@ -1,7 +1,7 @@
 """
 Pydantic models for API request/response schemas.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, Dict, List, Any
 from enum import Enum
 
@@ -19,6 +19,11 @@ class UploadResponse(BaseModel):
     files: Dict[str, str]
 
 
+class ErrorResponse(BaseModel):
+    detail: str
+    error_code: Optional[str] = None
+
+
 class AnalysisRequest(BaseModel):
     job_id: str
     stride: int = 1
@@ -27,10 +32,8 @@ class AnalysisRequest(BaseModel):
     run_msm: bool = True
     ligand_selection: Optional[str] = None
     reference_pdb: Optional[str] = None
-    # Subtrajectory analysis (item 49)
     start_frame: Optional[int] = None
     end_frame: Optional[int] = None
-    # Configurable analysis parameters (item 44)
     hbond_cutoff: float = 3.5
     contact_cutoff: float = 8.0
     salt_bridge_cutoff: float = 4.0
@@ -40,6 +43,62 @@ class AnalysisRequest(BaseModel):
     grid_spacing: float = 2.0
     correlation_threshold: float = 0.5
     vae_latent_dim: int = 2
+
+    @field_validator("stride")
+    @classmethod
+    def stride_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("stride must be >= 1")
+        return v
+
+    @field_validator("hbond_cutoff")
+    @classmethod
+    def hbond_cutoff_range(cls, v: float) -> float:
+        if not 2.0 <= v <= 5.0:
+            raise ValueError("hbond_cutoff must be between 2.0 and 5.0 Å")
+        return v
+
+    @field_validator("contact_cutoff")
+    @classmethod
+    def contact_cutoff_range(cls, v: float) -> float:
+        if not 3.0 <= v <= 15.0:
+            raise ValueError("contact_cutoff must be between 3.0 and 15.0 Å")
+        return v
+
+    @field_validator("salt_bridge_cutoff")
+    @classmethod
+    def salt_bridge_cutoff_range(cls, v: float) -> float:
+        if not 2.0 <= v <= 8.0:
+            raise ValueError("salt_bridge_cutoff must be between 2.0 and 8.0 Å")
+        return v
+
+    @field_validator("temperature")
+    @classmethod
+    def temperature_range(cls, v: float) -> float:
+        if not 200.0 <= v <= 500.0:
+            raise ValueError("temperature must be between 200 and 500 K")
+        return v
+
+    @field_validator("fel_bins")
+    @classmethod
+    def fel_bins_range(cls, v: int) -> int:
+        if not 10 <= v <= 200:
+            raise ValueError("fel_bins must be between 10 and 200")
+        return v
+
+    @field_validator("vae_latent_dim")
+    @classmethod
+    def vae_latent_range(cls, v: int) -> int:
+        if not 1 <= v <= 32:
+            raise ValueError("vae_latent_dim must be between 1 and 32")
+        return v
+
+    @field_validator("correlation_threshold")
+    @classmethod
+    def corr_threshold_range(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("correlation_threshold must be between 0 and 1")
+        return v
 
 
 class ProgressUpdate(BaseModel):

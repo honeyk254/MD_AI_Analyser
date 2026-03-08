@@ -33,12 +33,8 @@ def detect_domains(universe, n_domains=None, **kwargs):
         mean_pos = positions.mean(axis=0)
         delta = positions - mean_pos
 
-        dccm = np.zeros((n_res, n_res))
-        for i in range(n_res):
-            for j in range(i, n_res):
-                cij = np.mean(np.sum(delta[:, i, :] * delta[:, j, :], axis=1))
-                dccm[i, j] = cij
-                dccm[j, i] = cij
+        n_frames = delta.shape[0]
+        dccm = np.einsum('fid,fjd->ij', delta, delta) / n_frames
 
         diag = np.sqrt(np.diag(dccm))
         diag[diag == 0] = 1e-10

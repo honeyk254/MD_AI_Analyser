@@ -59,6 +59,7 @@ def compute_interaction_fingerprints(universe, hydrophobic_cutoff=5.0, aromatic_
                     hydrophobic_atoms.positions, hydrophobic_atoms.positions,
                     box=ts.dimensions
                 )
+                seen_hyd_pairs = set()
                 for i in range(len(hydrophobic_atoms)):
                     for j in range(i + 1, len(hydrophobic_atoms)):
                         if hyd_dists[i, j] < hydrophobic_cutoff:
@@ -66,9 +67,10 @@ def compute_interaction_fingerprints(universe, hydrophobic_cutoff=5.0, aromatic_
                             rj = int(hydrophobic_atoms[j].resid)
                             if abs(ri - rj) > 2:
                                 pair = (min(ri, rj), max(ri, rj))
-                                interaction_counts[pair]["hydrophobic"] += 1
-                                frame_count += 1
-                                break  # one contact per residue pair per frame
+                                if pair not in seen_hyd_pairs:
+                                    seen_hyd_pairs.add(pair)
+                                    interaction_counts[pair]["hydrophobic"] += 1
+                                    frame_count += 1
                     if frame_count > 500:
                         break  # cap per frame
 

@@ -62,14 +62,8 @@ def compute_dynamic_network(universe, n_windows=5, correlation_threshold=0.5, **
             # Compute DCCM for this window
             mean_pos = window_pos.mean(axis=0)
             delta = window_pos - mean_pos
-            n_w_frames = len(window_pos)
 
-            dccm = np.zeros((n_res, n_res))
-            for i in range(n_res):
-                for j in range(i, n_res):
-                    cij = np.mean(np.sum(delta[:, i, :] * delta[:, j, :], axis=1))
-                    dccm[i, j] = cij
-                    dccm[j, i] = cij
+            dccm = np.einsum('fid,fjd->ij', delta, delta) / len(window_pos)
 
             diag = np.sqrt(np.diag(dccm))
             diag[diag == 0] = 1e-10

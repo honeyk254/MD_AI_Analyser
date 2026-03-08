@@ -19,12 +19,14 @@ def generate_all_plots(result) -> dict:
         ("rg_plot", _plot_rg, result.rg),
         ("ss_plot", _plot_secondary_structure, result.secondary_structure),
         ("hbond_plot", _plot_hbonds, result.hbonds),
+        ("salt_bridges_plot", _plot_salt_bridges, result.salt_bridges),
         ("contact_map", _plot_contact_map, result.contacts),
         ("pca_plot", _plot_pca, result.pca),
         ("dccm_plot", _plot_dccm, result.dccm),
         ("fel_plot", _plot_free_energy, result.free_energy),
         ("clustering_plot", _plot_clustering, result.clustering),
         ("sasa_plot", _plot_sasa, result.sasa),
+        ("tica_plot", _plot_tica, result.tica),
         ("dimensionality_plot", _plot_dimensionality, result.dimensionality),
         ("dimensionality_3d_plot", _plot_dimensionality_3d, result.dimensionality),
         ("gnn_plot", _plot_gnn, result.gnn_results),
@@ -156,6 +158,39 @@ def _plot_hbonds(data):
     ))
     return _dark_layout(fig, f"Hydrogen Bonds (Mean: {data.get('mean_hbonds', 0):.1f})",
                         "Time (ps)", "Number of H-bonds")
+
+
+def _plot_salt_bridges(data):
+    pairs = data.get("pairs", [])
+    time = data.get("time", [])
+    total_per_frame = data.get("total_per_frame", [])
+    if not pairs and not total_per_frame:
+        return None
+    fig = make_subplots(rows=2, cols=1, subplot_titles=(
+        "Salt Bridges Over Time", "Top Salt Bridge Pairs (Occupancy)"),
+        row_heights=[0.5, 0.5])
+    if time and total_per_frame:
+        fig.add_trace(go.Scatter(
+            x=time, y=total_per_frame,
+            mode='lines', name='Salt Bridges/Frame',
+            line=dict(color='#ffd93d', width=1.5),
+            fill='tozeroy', fillcolor='rgba(255,217,61,0.1)',
+        ), row=1, col=1)
+    if pairs:
+        labels = [f"{p['positive']}-{p['negative']}" for p in pairs[:20]]
+        occupancies = [p['occupancy'] for p in pairs[:20]]
+        fig.add_trace(go.Bar(
+            x=labels, y=occupancies,
+            marker_color='#fdcb6e', name='Occupancy',
+        ), row=2, col=1)
+    fig.update_layout(
+        template="plotly_dark", paper_bgcolor="#1a1a2e", plot_bgcolor="#16213e",
+        font=dict(color="#E0E0E0"), margin=dict(l=60, r=30, t=60, b=50),
+        title=dict(text=f"Salt Bridges (Mean: {data.get('mean_salt_bridges', 0):.1f}/frame)",
+                   font=dict(size=18, color="#E0E0E0")),
+        height=600,
+    )
+    return fig
 
 
 def _plot_contact_map(data):
@@ -338,6 +373,38 @@ def _plot_msm(data):
         colorbar=dict(title="Probability"),
     ))
     return _dark_layout(fig, "MSM Transition Probability Matrix", "To State", "From State")
+
+
+def _plot_tica(data):
+    projections = data.get("projections", [])
+    timescales = data.get("timescales", [])
+    if not projections:
+        return None
+    arr = np.array(projections)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=(
+        "tICA Projection (tIC1 vs tIC2)", "Implied Timescales"))
+    if arr.shape[1] >= 2:
+        fig.add_trace(go.Scatter(
+            x=arr[:, 0], y=arr[:, 1],
+            mode='markers', name='Frames',
+            marker=dict(color=list(range(len(arr))), colorscale='Viridis',
+                       size=4, colorbar=dict(title="Frame", x=0.45)),
+        ), row=1, col=1)
+    if timescales:
+        valid_ts = [(i + 1, t) for i, t in enumerate(timescales) if t != float('inf') and t > 0]
+        if valid_ts:
+            fig.add_trace(go.Bar(
+                x=[f"tIC{i}" for i, _ in valid_ts],
+                y=[t for _, t in valid_ts],
+                marker_color='#55efc4', name='Timescale',
+            ), row=1, col=2)
+    fig.update_layout(
+        template="plotly_dark", paper_bgcolor="#1a1a2e", plot_bgcolor="#16213e",
+        font=dict(color="#E0E0E0"), margin=dict(l=60, r=30, t=60, b=50),
+        title=dict(text=f"tICA Analysis (lag={data.get('lag_time', '?')})",
+                   font=dict(size=18, color="#E0E0E0")),
+    )
+    return fig
 
 
 # ──────────────────────────────────────────────────────────────

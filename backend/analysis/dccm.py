@@ -36,13 +36,9 @@ def compute_dccm(universe, threshold=0.7, **kwargs):
         # Fluctuations
         delta = positions - mean_pos  # (n_frames, n_atoms, 3)
 
-        # Cross-correlation matrix
-        dccm = np.zeros((n_atoms, n_atoms))
-        for i in range(n_atoms):
-            for j in range(i, n_atoms):
-                cij = np.mean(np.sum(delta[:, i, :] * delta[:, j, :], axis=1))
-                dccm[i, j] = cij
-                dccm[j, i] = cij
+        # Cross-correlation matrix (vectorized)
+        n_frames = delta.shape[0]
+        dccm = np.einsum('fid,fjd->ij', delta, delta) / n_frames
 
         # Normalize
         diag = np.sqrt(np.diag(dccm))

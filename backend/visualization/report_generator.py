@@ -39,6 +39,8 @@ def generate_html_report(result, output_dir: Path) -> Path:
         "transformer_plot": "Transformer Temporal Analysis",
         "msm_plot": "Markov State Model",
         # Phase 3 plots
+        "tica_plot": "tICA Slow Motions",
+        "salt_bridges_plot": "Salt Bridges",
         "water_bridges_plot": "Water Bridges",
         "energy_plot": "Energy Decomposition",
         "prs_plot": "Perturbation Response Scanning",
@@ -210,22 +212,24 @@ def export_csv(result, output_dir: Path) -> Path:
 
     # H-bonds
     hbonds = result.hbonds
-    if isinstance(hbonds, dict) and "n_hbonds_per_frame" in hbonds:
-        times_hb = hbonds.get("time", list(range(len(hbonds["n_hbonds_per_frame"]))))
-        for t, v in zip(times_hb, hbonds["n_hbonds_per_frame"]):
+    if isinstance(hbonds, dict) and "n_hbonds" in hbonds:
+        times_hb = hbonds.get("time", list(range(len(hbonds["n_hbonds"]))))
+        for t, v in zip(times_hb, hbonds["n_hbonds"]):
             rows.append({"metric": "HBonds_count", "time": t, "value": v, "unit": "count"})
 
     # Salt bridges
     sb = result.salt_bridges
-    if isinstance(sb, dict) and "n_salt_bridges" in sb:
-        rows.append({"metric": "SaltBridges_total", "value": sb["n_salt_bridges"], "unit": "count"})
+    if isinstance(sb, dict) and "total_unique_pairs" in sb:
+        rows.append({"metric": "SaltBridges_unique_pairs", "value": sb["total_unique_pairs"], "unit": "count"})
+    if isinstance(sb, dict) and "mean_salt_bridges" in sb:
+        rows.append({"metric": "SaltBridges_mean_per_frame", "value": sb["mean_salt_bridges"], "unit": "count"})
 
     # Secondary structure fractions
     ss = result.secondary_structure
     if isinstance(ss, dict):
-        for key in ["helix_fraction", "sheet_fraction", "coil_fraction"]:
-            if key in ss:
-                rows.append({"metric": f"SS_{key}", "value": ss[key], "unit": "fraction"})
+        for key, mean_key in [("helix_fraction", "mean_helix"), ("sheet_fraction", "mean_sheet"), ("coil_fraction", "mean_coil")]:
+            if mean_key in ss:
+                rows.append({"metric": f"SS_{key}", "value": ss[mean_key], "unit": "fraction"})
 
     # Entropy
     ent = result.entropy
@@ -234,9 +238,55 @@ def export_csv(result, output_dir: Path) -> Path:
 
     # Energy decomposition
     energy = result.energy_decomposition
-    if isinstance(energy, dict) and "per_residue_energy" in energy:
-        for r, v in zip(energy.get("resids", []), energy["per_residue_energy"]):
+    if isinstance(energy, dict) and "total_energy" in energy:
+        for r, v in zip(energy.get("resids", []), energy["total_energy"]):
             rows.append({"metric": "Energy_per_residue", "residue": r, "value": v, "unit": "kJ/mol"})
+
+    # NMA B-factors
+    nma = result.nma
+    if isinstance(nma, dict) and "bfactors" in nma:
+        for r, v in zip(nma.get("resids", []), nma["bfactors"]):
+            rows.append({"metric": "NMA_bfactor", "residue": r, "value": v, "unit": "norm"})
+
+    # PRS effector/sensor scores
+    prs = result.prs
+    if isinstance(prs, dict) and "effector_scores" in prs:
+        for r, v in zip(prs.get("resids", []), prs["effector_scores"]):
+            rows.append({"metric": "PRS_effector", "residue": r, "value": v, "unit": "score"})
+        for r, v in zip(prs.get("resids", []), prs.get("sensor_scores", [])):
+            rows.append({"metric": "PRS_sensor", "residue": r, "value": v, "unit": "score"})
+
+    # Water bridges
+    wb = result.water_bridges
+    if isinstance(wb, dict) and "bridges" in wb:
+        for b in wb["bridges"]:
+            rows.append({"metric": "WaterBridge", "residue": f"{b['resid_1']}-{b['resid_2']}", "value": b["occupancy"], "unit": "fraction"})
+
+    # tICA timescales
+    tica = result.tica
+    if isinstance(tica, dict) and "timescales" in tica:
+        for i, ts in enumerate(tica["timescales"]):
+            if ts != float('inf'):
+                rows.append({"metric": f"tICA_timescale_tIC{i+1}", "value": ts, "unit": "frames"})
+
+    # Dynamic network community stability
+    dn = result.dynamic_network
+    if isinstance(dn, dict) and "community_stability" in dn:
+        for r, v in zip(dn.get("resids", []), dn["community_stability"]):
+            rows.append({"metric": "DynNetwork_stability", "residue": r, "value": v, "unit": "fraction"})
+
+    # Interaction fingerprints consensus
+    ifp = result.interaction_fingerprints
+    if isinstance(ifp, dict) and "consensus_fingerprint" in ifp:
+        for r, v in zip(ifp.get("resids", []), ifp["consensus_fingerprint"]):
+            rows.append({"metric": "IFP_consensus", "residue": r, "value": v, "unit": "score"})
+
+    # VAE reconstruction error
+    vae = result.vae
+    if isinstance(vae, dict) and "reconstruction_error" in vae:
+        rows.append({"metric": "VAE_recon_error", "value": vae["reconstruction_error"], "unit": "MSE"})
+        for i, v in enumerate(vae.get("latent_variance", [])):
+            rows.append({"metric": f"VAE_latent_var_dim{i+1}", "value": v, "unit": "variance"})
 
     # PCA explained variance
     pca = result.pca

@@ -553,6 +553,64 @@ body::before {
     gap: 14px;
 }
 
+/* Filter Bar */
+.insight-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 18px;
+    padding: 6px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+.insight-filter-btn {
+    padding: 7px 14px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8em;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 7px;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.insight-filter-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.insight-filter-btn.active {
+    color: var(--filter-color, var(--accent-cyan));
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--filter-color, var(--accent-cyan));
+}
+
+.filter-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 7px;
+    border-radius: 10px;
+    min-width: 22px;
+    text-align: center;
+}
+
+.insight-filter-btn.active .filter-count {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.insight-cards {
+    display: grid;
+    gap: 14px;
+}
+
 .insight-card {
     background: rgba(255, 255, 255, 0.03);
     border-left: 4px solid var(--accent-cyan);

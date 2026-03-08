@@ -10,6 +10,7 @@ mdtraj
 # Machine learning
 scikit-learn
 umap-learn
+hdbscan
 
 # Deep learning
 torch
@@ -21,6 +22,9 @@ networkx
 # Visualization
 plotly
 kaleido
+
+# PDF report generation
+fpdf2
 
 # Web framework
 fastapi

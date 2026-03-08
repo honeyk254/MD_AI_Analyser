@@ -283,10 +283,27 @@
                             <h4>Highlight</h4>
                             <select id="viewer-highlight" onchange="highlightResidues()">
                                 <option value="none">None</option>
-                                <option value="flexible">Flexible Residues</option>
-                                <option value="hinge">Hinge Residues</option>
-                                <option value="hubs">Communication Hubs</option>
-                                <option value="gnn">GNN Top Residues</option>
+                                <optgroup label="Structural">
+                                    <option value="flexible">Flexible Residues</option>
+                                    <option value="hinge">Hinge Residues</option>
+                                    <option value="stable_core">Stable Core</option>
+                                    <option value="stiffness">Stiff Residues</option>
+                                </optgroup>
+                                <optgroup label="Functional">
+                                    <option value="hubs">Communication Hubs</option>
+                                    <option value="gnn">GNN Top Residues</option>
+                                    <option value="mutation">Mutation-Sensitive</option>
+                                    <option value="ptm">PTM Sites</option>
+                                </optgroup>
+                                <optgroup label="Binding">
+                                    <option value="cryptic">Cryptic Binding Sites</option>
+                                    <option value="ppi">PPI Hotspots</option>
+                                    <option value="druggability">Druggable Pockets</option>
+                                </optgroup>
+                                <optgroup label="Other">
+                                    <option value="aggregation">Aggregation-Prone</option>
+                                    <option value="electrostatic">Electrostatic Funnels</option>
+                                </optgroup>
                             </select>
                         </div>
                     </div>
