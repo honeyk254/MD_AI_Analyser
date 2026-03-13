@@ -21,7 +21,7 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
 - Time-lagged Independent Component Analysis (tICA)
 - Normal Mode Analysis (ANM-based, distance-normalised Hessian, uniform spring constant, vectorised)
 - Perturbation Response Scanning (effector/sensor identification)
-- Energy Decomposition (per-residue coarse-grained LJ + Coulomb; qualitative ranking only)
+- Interaction Score Decomposition (per-residue Cα-based proximity scores using LJ/Coulomb forms; coarse-grained heuristic ranking only, not physical energies)
 - Configurational Entropy (Schlitter's method upper bound with explicit kBT)
 - Convergence Assessment (block-average SEM ratio, autocorrelation, cosine content)
 - Binding Kinetics (residence time, kon/koff, contact survival; statistical caveats included)
@@ -214,7 +214,7 @@ md_ai_analyzer/
 │   │   ├── tica.py                 # Time-lagged ICA
 │   │   ├── nma.py                  # Normal mode analysis (vectorised ANM)
 │   │   ├── prs.py                  # Perturbation response scanning
-│   │   ├── energy_decomposition.py # Per-residue energy decomposition
+│   │   ├── energy_decomposition.py # Per-residue interaction score decomposition (heuristic)
 │   │   ├── entropy.py              # Configurational entropy (Schlitter)
 │   │   ├── convergence.py          # Simulation convergence assessment
 │   │   ├── binding_kinetics.py     # Ligand binding kinetics

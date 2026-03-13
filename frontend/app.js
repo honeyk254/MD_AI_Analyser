@@ -362,7 +362,7 @@ function renderCaveats() {
     const ed = analysisResults.energy_decomposition || {};
 
     if (bk.kinetics_caveat) notes.push({ label: 'Binding Kinetics', text: bk.kinetics_caveat });
-    if (ed.caveat) notes.push({ label: 'Energy Decomposition', text: ed.caveat });
+    if (ed.caveat) notes.push({ label: 'Interaction Scores', text: ed.caveat });
 
     if (notes.length === 0) return;
 
@@ -450,7 +450,7 @@ const plotNameMap = {
     sasa_plot: 'SASA', dimensionality_plot: 'Dim. Reduction',
     dimensionality_3d_plot: '3D Projections',
     gnn_plot: 'GNN', transformer_plot: 'Transformer', msm_plot: 'MSM',
-    tica_plot: 'tICA', water_bridges_plot: 'Water Bridges', energy_plot: 'Energy Decomp.',
+    tica_plot: 'tICA', water_bridges_plot: 'Water Bridges', energy_plot: 'Interaction Scores',
     prs_plot: 'PRS', nma_plot: 'Normal Modes', entropy_plot: 'Entropy',
     ifp_plot: 'Interaction FP', tunnel_plot: 'Cavities/Voids',
     vae_plot: 'VAE Latent', dynamic_network_plot: 'Dynamic Network',
@@ -516,7 +516,7 @@ const insightTypeLabels = {
     metastable_kinetics: 'Metastable Kinetics', domain_motion: 'Domain Motion',
     stability_assessment: 'Stability Assessment', gnn_key_residues: 'GNN Key Residues',
     transformer_transitions: 'Temporal Change-Points',
-    water_bridge_sites: 'Water Bridge Sites', energy_hotspot: 'Energy Hotspot',
+    water_bridge_sites: 'Water Bridge Sites', energy_hotspot: 'Interaction Hotspot',
     prs_effectors_sensors: 'PRS Effectors/Sensors', nma_collective_motion: 'NMA Collective Motion',
     entropy_estimate: 'Entropy Estimate', cavity_channels: 'Cavity Channels',
     dynamic_network_evolution: 'Dynamic Network', vae_conformational_landscape: 'VAE Landscape',
