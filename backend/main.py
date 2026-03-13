@@ -419,7 +419,10 @@ async def get_pdf_report(job_id: str) -> FileResponse:
 
     job_dir = Path(job["job_dir"])
     try:
-        pdf_path = export_pdf(job["result"], job_dir)
+        loop = asyncio.get_event_loop()
+        pdf_path = await loop.run_in_executor(
+            None, export_pdf, job["result"], job_dir
+        )
         if pdf_path and pdf_path.exists():
             return FileResponse(
                 pdf_path, media_type="application/pdf",

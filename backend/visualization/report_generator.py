@@ -13,6 +13,7 @@ Provides three export formats:
 import csv
 import json
 import logging
+from concurrent.futures import ProcessPoolExecutor, BrokenExecutor
 from pathlib import Path
 from typing import Any, Optional
 
@@ -400,6 +401,40 @@ def export_csv(result: Any, output_dir: Path) -> Path:
     return csv_path
 
 
+def _kaleido_render(fig_dict: dict) -> bytes:
+    """Render one Plotly figure dict to PNG bytes (runs in a worker process).
+
+    Isolated so that kaleido calling os._exit() only kills the worker,
+    not the main server process.
+    """
+    import plotly.io as pio
+    import plotly.graph_objects as go
+
+    fig = go.Figure(fig_dict)
+    return pio.to_image(fig, format="png", width=1000, height=600, scale=2)
+
+
+def _render_figures_isolated(figs: list) -> list[bytes]:
+    """Render Plotly figures to PNG bytes in an isolated subprocess.
+
+    Uses a single-worker ProcessPoolExecutor so that any crash inside
+    kaleido (including os._exit()) cannot propagate to the server process.
+    """
+    fig_dicts = [fig.to_dict() for fig in figs]
+    images: list[bytes] = []
+    try:
+        with ProcessPoolExecutor(max_workers=1) as pool:
+            futures = [pool.submit(_kaleido_render, fd) for fd in fig_dicts]
+            for fut in futures:
+                try:
+                    images.append(fut.result(timeout=60))
+                except Exception as exc:
+                    logger.warning("Skipping plot — render failed: %s", exc)
+    except (BrokenExecutor, Exception) as exc:
+        logger.error("Kaleido worker pool failed: %s", exc)
+    return images
+
+
 def export_pdf(result: Any, output_dir: Path) -> Path:
     """Export analysis report as a multi-page PDF.
 
@@ -464,14 +499,9 @@ def export_pdf(result: Any, output_dir: Path) -> Path:
     if not figs:
         raise RuntimeError("No plots available for PDF export")
 
-    # Render each figure to a PNG image
-    images: list[bytes] = []
-    for fig in figs:
-        try:
-            img_bytes: bytes = pio.to_image(fig, format="png", width=1000, height=600, scale=2)
-            images.append(img_bytes)
-        except Exception:
-            continue
+    # Render each figure to PNG in an isolated subprocess (protects the server
+    # from kaleido calling os._exit() on Windows or render failures).
+    images: list[bytes] = _render_figures_isolated(figs)
 
     if not images:
         raise RuntimeError("Could not render any plots to images")
