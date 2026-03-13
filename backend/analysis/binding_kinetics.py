@@ -222,6 +222,13 @@ def compute_binding_kinetics(
             "n_bind_events": n_bind,
             "n_unbind_events": n_unbind,
             "total_contact_fraction": round(float(np.mean(any_contact)), 4),
+            "kinetics_caveat": (
+                "kon/koff estimates are counting-based approximations and "
+                "require many binding/unbinding events for statistical "
+                "reliability. Typical MD simulations (ns-us) may be too "
+                "short for converged kinetics. Interpret rate estimates "
+                "with caution unless >= 10 events of each type are observed."
+            ),
         }
 
     except Exception as e:

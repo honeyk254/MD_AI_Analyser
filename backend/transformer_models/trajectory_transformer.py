@@ -155,9 +155,17 @@ def run_transformer_analysis(
     displacement features.  Uses masked self-supervised reconstruction to
     learn frame representations, then identifies:
 
-    * Key transition frames (abrupt hidden-state changes)
+    * Temporal change-point frames (abrupt hidden-state changes)
     * Temporal residue importance (gradient-based attribution)
     * Structural transition events
+
+    **Note**: The model trains on a single trajectory using masked
+    self-supervised reconstruction.  Detected "transitions" are temporal
+    change-points in the learned hidden-state space, not independently
+    validated structural transitions.  The model functions as a nonlinear
+    change-point detector, and results should be cross-referenced with
+    RMSD, clustering, or experimental data before drawing biological
+    conclusions.
 
     Parameters
     ----------

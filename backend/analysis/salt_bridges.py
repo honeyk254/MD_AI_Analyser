@@ -55,11 +55,13 @@ def compute_salt_bridges(
             "(resname LYS and name NZ) or "
             "(resname HIP HSP and name NE2)"
         )
-        # Negatively charged: Asp carboxylate oxygens (OD1/OD2),
-        # Glu carboxylate oxygens (OE1/OE2)
+        # Negatively charged: use a single representative atom per
+        # carboxylate group to avoid double-counting salt bridges when
+        # both oxygens are within the cutoff.
+        # Asp: CG (carboxylate carbon), Glu: CD (carboxylate carbon)
         neg_sel = universe.select_atoms(
-            "(resname ASP and (name OD1 or name OD2)) or "
-            "(resname GLU and (name OE1 or name OE2))"
+            "(resname ASP and name CG) or "
+            "(resname GLU and name CD)"
         )
 
         if len(pos_sel) == 0 or len(neg_sel) == 0:
@@ -83,13 +85,15 @@ def compute_salt_bridges(
             cutoff,
         )
 
-        # Pre-compute residue labels (outside the frame loop)
+        # Pre-compute residue labels and integer resids (outside the frame loop)
         pos_labels: List[str] = [
             f"{a.resname}{a.resid}" for a in pos_sel
         ]
         neg_labels: List[str] = [
             f"{a.resname}{a.resid}" for a in neg_sel
         ]
+        pos_resids: List[int] = [int(a.resid) for a in pos_sel]
+        neg_resids: List[int] = [int(a.resid) for a in neg_sel]
 
         pair_contacts: Dict[tuple, int] = {}
         n_frames = len(universe.trajectory)

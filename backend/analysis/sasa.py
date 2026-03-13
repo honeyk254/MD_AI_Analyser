@@ -85,6 +85,10 @@ def compute_sasa(
                 element = md.element.carbon
             topology.add_atom(atom.name, element, res_obj)
 
+        # Add standard bonds so MDTraj can correctly assign atom radii
+        # for the Shrake-Rupley calculation.
+        topology.create_standard_bonds()
+
         traj = md.Trajectory(positions, topology)
 
         # Shrake-Rupley SASA per residue: (n_frames, n_residues)

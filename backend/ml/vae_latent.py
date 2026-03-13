@@ -131,15 +131,21 @@ def run_vae_analysis(
         dataset = TensorDataset(torch.FloatTensor(features_norm))
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-        # ── Training ─────────────────────────────────────────────
+        # ── Training (with KL annealing warmup) ────────────────
         recon_losses: List[float] = []
         kl_losses: List[float] = []
         total_losses: List[float] = []
+
+        # KL annealing: linearly ramp beta from 0 to 1 over the first
+        # 40% of epochs to prevent posterior collapse (Bowman et al. 2016).
+        kl_warmup_epochs: int = max(1, int(epochs * 0.4))
 
         for epoch in range(epochs):
             epoch_recon = 0.0
             epoch_kl = 0.0
             n_samples = 0
+
+            beta: float = min(1.0, epoch / kl_warmup_epochs)
 
             model.train()
             for (batch,) in loader:
@@ -148,7 +154,7 @@ def run_vae_analysis(
 
                 recon_loss = nn.functional.mse_loss(recon, batch, reduction="sum")
                 kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-                loss = recon_loss + kl_loss
+                loss = recon_loss + beta * kl_loss
 
                 optimizer.zero_grad()
                 loss.backward()

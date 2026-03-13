@@ -231,6 +231,14 @@ def compute_energy_decomposition(
             "has_charges": bool(has_charges),
             "resnames": resnames,
             "parameter_source": "residue-type-specific Lorentz-Berthelot",
+            "caveat": (
+                "These are coarse-grained C-alpha energy estimates using "
+                "heuristic LJ parameters, NOT rigorous force-field energies. "
+                "Values are suitable for qualitative residue-pair ranking only. "
+                "Do not use for quantitative free-energy or binding-affinity "
+                "calculations. For accurate decomposition use MMPBSA, FEP, "
+                "or native GROMACS/AMBER energy decomposition tools."
+            ),
         }
 
     except Exception as e:

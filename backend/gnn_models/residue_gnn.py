@@ -99,11 +99,18 @@ def run_gnn_analysis(universe: Any, **kwargs: Any) -> dict[str, Any]:
     The pipeline:
 
     1. Builds per-frame residue contact graphs from Calpha positions.
-    2. Computes node features (RMSF, average contacts, displacement
-       fluctuations).
+    2. Computes node features (average contacts, displacement
+       fluctuations, sequence position).
     3. Trains a GAT+GCN hybrid to predict per-residue RMSF in a
        self-supervised fashion.
-    4. Extracts learned attention weights and embeddings to rank residues.
+    4. Extracts learned attention weights and embeddings to rank residues
+       by their distinctive graph-topological properties.
+
+    **Note**: The GNN learns to predict RMSF from graph structure.
+    Residue importance scores reflect graph-topological distinctiveness,
+    not independently validated functional importance.  Do not interpret
+    high-scoring residues as experimentally confirmed functional sites
+    without additional validation.
 
     Parameters
     ----------

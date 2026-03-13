@@ -11,7 +11,7 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
 ### Classical MD Analysis (21 modules)
 - RMSD, RMSF, Radius of Gyration
 - Secondary Structure Evolution (DSSP)
-- Hydrogen Bonds, Salt Bridges, Water Bridges
+- Hydrogen Bonds, Salt Bridges (carboxylate-carbon selection to avoid double-counting), Water Bridges
 - Contact Maps & Distance Matrices
 - Principal Component Analysis (PCA)
 - Dynamic Cross-Correlation Matrix (DCCM)
@@ -19,42 +19,43 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
 - Free Energy Landscape (Boltzmann inversion)
 - Solvent Accessible Surface Area (SASA)
 - Time-lagged Independent Component Analysis (tICA)
-- Normal Mode Analysis (ANM-based, uniform spring constant, vectorised Hessian)
+- Normal Mode Analysis (ANM-based, distance-normalised Hessian, uniform spring constant, vectorised)
 - Perturbation Response Scanning (effector/sensor identification)
-- Energy Decomposition (per-residue LJ + Coulomb)
-- Configurational Entropy (Schlitter's method with explicit kBT)
-- Convergence Assessment (block averaging, autocorrelation, cosine content)
-- Binding Kinetics (residence time, kon/koff, contact survival)
+- Energy Decomposition (per-residue coarse-grained LJ + Coulomb; qualitative ranking only)
+- Configurational Entropy (Schlitter's method upper bound with explicit kBT)
+- Convergence Assessment (block-average SEM ratio, autocorrelation, cosine content)
+- Binding Kinetics (residence time, kon/koff, contact survival; statistical caveats included)
 - Trajectory Comparison (two-trajectory or half-split equilibration check)
 
 ### Machine Learning (10 modules)
 - Conformational State Discovery (HDBSCAN / GMM / KMeans)
-- Markov State Models (validated transition matrix, MFPT, timescales, Chapman-Kolmogorov test, implied timescale convergence)
+- Markov State Models (reversible transition matrix, MFPT, timescales, Chapman-Kolmogorov test with direct T(k·τ) estimation, `is_markovian` flag, implied timescale convergence)
 - Allosteric Pathway Detection (graph centrality, community detection)
 - Dynamic Domain Detection (spectral clustering on DCCM)
 - Ligand Interaction Analysis
 - Dimensionality Reduction (PCA / UMAP / t-SNE)
 - Interaction Fingerprints (hydrophobic, salt bridge, aromatic contacts)
-- Tunnel & Cavity Detection (grid-based probe + Delaunay tessellation)
+- Cavity/Void Detection (grid-based probe + Delaunay tessellation; detects static per-frame volumes, not connected tunnels — use CAVER/MOLE for tunnel tracing)
 - Dynamic Network Analysis (time-windowed DCCM, community evolution)
-- VAE Latent Space Analysis (variational autoencoder for conformational landscapes)
+- VAE Latent Space Analysis (variational autoencoder with KL annealing for conformational landscapes)
 
 ### Deep Learning
 - **Graph Neural Networks** (GAT + GCN hybrid via PyTorch Geometric)
-  - Self-supervised residue importance learning
+  - Self-supervised RMSF prediction from contact graph structure
+  - Residue importance ranked by graph-topological distinctiveness (not validated functional importance)
   - Attention-based interaction detection
   - Community detection from learned embeddings
 - **Transformer** (self-supervised masked reconstruction)
-  - Structural transition detection
+  - Temporal change-point detection (nonlinear change-point detector in hidden-state space)
   - Temporal importance scoring
   - Per-residue dynamic attribution via Integrated Gradients
-- **Variational Autoencoder** (configurable latent dimension)
+- **Variational Autoencoder** (configurable latent dimension, KL annealing warmup)
   - Conformational landscape mapping
   - Reconstruction quality assessment
   - Latent density estimation
 
 ### AI Biological Inference Engine
-Automatically generates 38 types of biological interpretations via a data-driven detector dispatch, including:
+Automatically generates 38 types of biological interpretations via a data-driven detector dispatch with calibrated, reconstruction-quality-weighted confidence scores. All insights include explicit caveats about limitations and cross-validation requirements, including:
 
 **Structural:**
 - Hinge residue detection
@@ -309,10 +310,22 @@ Trajectory coordinates are collected once via shared utility functions (`collect
 
 ### Vectorised Computation
 Performance-critical code uses numpy vectorisation:
-- **NMA Hessian**: Built via broadcasting with uniform spring constant (standard ANM)
+- **NMA Hessian**: Built via broadcasting with distance-normalised spring constant (`k/|r|²`) per the standard ANM formulation (Atilgan et al. 2001)
 - **DCCM**: Computed via `np.einsum("fid,fjd->ij", delta, delta)`
 - **Interaction fingerprints**: `np.triu_indices` + boolean masking
 - **Salt bridges / H-bonds**: `np.argwhere` and `np.bincount`
+
+### Salt Bridge Counting
+Negatively charged groups are selected using the carboxylate *carbon* (ASP:CG, GLU:CD) rather than both oxygens. This avoids double-counting when both oxygens of the same carboxylate are within the cutoff.
+
+### MDTraj Bond Inference
+Both SASA (Shrake-Rupley) and DSSP (secondary structure) call `topology.create_standard_bonds()` on the reconstructed MDTraj topology. This ensures correct atom radii are assigned for SASA and backbone hydrogen-bond geometry is correctly identified for DSSP.
+
+### VAE KL Annealing
+The VAE training schedule linearly ramps the KL weight β from 0 → 1 over the first 40% of epochs (Bowman et al. 2016 warmup), preventing posterior collapse and producing more expressive latent representations.
+
+### Chapman-Kolmogorov Validation
+The MSM CK test now computes both predicted T(τ)^k and directly estimated T(k·τ) from trajectory data. A `max_deviation` metric (max absolute difference in self-transition probabilities) and `is_markovian` flag (threshold: 0.1) are returned alongside the visual comparison.
 
 ### ML Reproducibility
 All ML and deep learning modules call `set_global_seed(42)` before model initialisation, ensuring deterministic results across runs (given the same input).

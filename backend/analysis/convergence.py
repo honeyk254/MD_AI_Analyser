@@ -141,12 +141,18 @@ def compute_convergence(
         n_checks += 1
 
         # Check 3: Block-average SEM convergence
-        if rmsd_blocks:
+        # In a converged simulation the SEM should plateau as block size
+        # grows.  We measure convergence by how stable the SEM is between
+        # the smallest and largest block sizes: a ratio close to 1
+        # indicates the SEM has plateaued (converged).
+        if len(rmsd_blocks) >= 2:
+            first_sem = rmsd_blocks[0]["sem"]
             last_sem = rmsd_blocks[-1]["sem"]
-            first_sem = (
-                rmsd_blocks[0]["sem"] if rmsd_blocks[0]["sem"] > 0 else 1.0
-            )
-            block_score = min(1.0, first_sem / (last_sem + 1e-8) * 0.3)
+            if last_sem > 0 and first_sem > 0:
+                sem_ratio = min(first_sem, last_sem) / max(first_sem, last_sem)
+                block_score = sem_ratio  # 1.0 = perfectly stable SEM
+            else:
+                block_score = 0.5
             score += block_score
             n_checks += 1
 

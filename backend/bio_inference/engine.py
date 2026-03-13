@@ -450,7 +450,7 @@ class BiologicalInferenceEngine:
         return insights
 
     def _interpret_gnn_results(self, result) -> List[Dict]:
-        """Interpret GNN-identified residue importance."""
+        """Interpret GNN-identified residue graph-topological properties."""
         insights = []
         gnn = result.gnn_results
 
@@ -458,14 +458,22 @@ class BiologicalInferenceEngine:
             top = gnn["top_residues"][:10]
             if top:
                 resids = [r["resid"] for r in top]
+                recon_err = gnn.get("reconstruction_error", 1.0)
+                # Confidence scaled by reconstruction quality
+                conf = round(min(0.65, 0.35 + 0.3 * max(0.0, 1.0 - recon_err)), 2)
                 insights.append({
                     "type": "gnn_key_residues",
                     "residues": resids,
                     "description": f"Graph Neural Network analysis identifies residues "
-                                  f"{', '.join(map(str, resids[:5]))} as structurally most important based on "
-                                  f"their graph connectivity patterns and dynamic properties. These residues "
-                                  f"are predicted to be critical for maintaining protein structure and function.",
-                    "confidence": 0.7,
+                                  f"{', '.join(map(str, resids[:5]))} as having distinctive "
+                                  f"graph-topological properties (high learned importance scores). "
+                                  f"These residues have unusual combinations of connectivity, "
+                                  f"fluctuation, and network position. Note: GNN importance "
+                                  f"reflects graph-structural distinctiveness, not experimentally "
+                                  f"validated functional importance. Cross-reference with "
+                                  f"mutagenesis data or conservation scores before drawing "
+                                  f"functional conclusions.",
+                    "confidence": conf,
                     "evidence": [
                         f"Res {r['resid']}: GNN importance={r['importance']:.3f}, RMSF={r['rmsf']:.2f}Å, contacts={r['contacts']:.1f}"
                         for r in top[:5]
@@ -476,24 +484,29 @@ class BiologicalInferenceEngine:
         return insights
 
     def _interpret_transformer_results(self, result) -> List[Dict]:
-        """Interpret Transformer-detected transitions."""
+        """Interpret Transformer-detected temporal change-points."""
         insights = []
         trans = result.transformer_results
 
         if isinstance(trans, dict) and "transition_frames" in trans:
             transitions = trans["transition_frames"]
             if transitions:
+                recon_err = trans.get("reconstruction_error", 1.0)
+                # Confidence scaled by reconstruction quality
+                conf = round(min(0.55, 0.30 + 0.25 * max(0.0, 1.0 - recon_err)), 2)
                 insights.append({
                     "type": "transformer_transitions",
                     "residues": [],
-                    "description": f"Transformer temporal analysis detects {len(transitions)} significant "
-                                  f"structural transition events in the trajectory. The most prominent occurs "
+                    "description": f"Transformer temporal analysis detects {len(transitions)} temporal "
+                                  f"change-points in the trajectory hidden-state space. The most prominent occurs "
                                   f"at frame {transitions[0]['frame']} (magnitude={transitions[0]['magnitude']:.3f}). "
-                                  f"These transitions represent major conformational rearrangements detected by the "
-                                  f"self-attention mechanism of the neural network.",
-                    "confidence": 0.65,
+                                  f"These change-points indicate abrupt shifts in the learned "
+                                  f"representation and may correspond to conformational rearrangements. "
+                                  f"Note: the model functions as a nonlinear change-point detector "
+                                  f"and results should be cross-referenced with RMSD/clustering data.",
+                    "confidence": conf,
                     "evidence": [
-                        f"Frame {t['frame']}: transition magnitude={t['magnitude']:.3f}"
+                        f"Frame {t['frame']}: change-point magnitude={t['magnitude']:.3f}"
                         for t in transitions[:5]
                     ],
                     "category": "transition",
@@ -617,21 +630,23 @@ class BiologicalInferenceEngine:
                     if prev > 0:
                         change = abs(last - prev) / prev
                         converged = change < 0.05
+                # Confidence directly reflects convergence quality
+                conf = 0.7 if converged else 0.4
                 insights.append({
                     "type": "entropy_estimate",
                     "residues": [],
                     "description": f"Configurational entropy estimated at {total:.2f} kJ/(mol·K) using "
-                                  f"Schlitter's method. {'The estimate is well-converged.' if converged else 'The estimate has not fully converged; longer simulation may be needed.'} "
-                                  f"High-entropy residues represent conformationally flexible regions that "
-                                  f"may contribute to binding entropy penalties or entropic stabilization.",
-                    "confidence": 0.65 if converged else 0.5,
+                                  f"Schlitter's method (upper bound). "
+                                  f"{'The estimate is well-converged across trajectory fractions.' if converged else 'The estimate has not fully converged; longer simulation may be needed for a reliable value.'} "
+                                  f"High-entropy residues represent conformationally flexible regions.",
+                    "confidence": conf,
                     "evidence": [f"{c['fraction']*100:.0f}% trajectory: S={c['entropy_J_mol_K']:.0f} J/(mol·K)" for c in convergence],
                     "category": "dynamic",
                 })
         return insights
 
     def _interpret_tunnels(self, result) -> List[Dict]:
-        """Interpret tunnel/cavity detection results."""
+        """Interpret cavity/void detection results."""
         insights = []
         tun = result.tunnels
         if isinstance(tun, dict) and not tun.get("error"):
@@ -639,14 +654,19 @@ class BiologicalInferenceEngine:
             mean_vol = tun.get("mean_cavity_volume", 0)
             if bottleneck and mean_vol > 0:
                 bn_resids = [b["resid"] for b in bottleneck[:5]]
+                # Confidence scales with number of bottleneck residues detected
+                n_bn = len(bottleneck)
+                conf = round(min(0.65, 0.35 + 0.03 * n_bn), 2)
                 insights.append({
                     "type": "cavity_channels",
                     "residues": bn_resids,
-                    "description": f"Cavity analysis detects an average internal volume of {mean_vol:.0f} ų. "
+                    "description": f"Cavity analysis detects an average internal volume of {mean_vol:.0f} Å³. "
                                   f"Key bottleneck residues lining the cavities: {', '.join(map(str, bn_resids))}. "
-                                  f"These residues gate access to internal tunnels or binding pockets "
-                                  f"and are prime targets for mutagenesis to modulate substrate access.",
-                    "confidence": 0.7,
+                                  f"Note: these are static per-frame cavity volumes, not connected "
+                                  f"tunnels. Use CAVER or MOLE for connected-path tunnel analysis. "
+                                  f"Bottleneck residues may gate access to internal voids "
+                                  f"and could be targets for further investigation.",
+                    "confidence": conf,
                     "evidence": [f"Residue {b['resid']}: cavity-lining frequency={b['cavity_frequency']*100:.0f}%" for b in bottleneck[:5]],
                     "category": "structural",
                 })
@@ -678,14 +698,19 @@ class BiologicalInferenceEngine:
                 if persistent_hubs:
                     evidence.append(f"Persistent hub residues across all windows: {', '.join(map(str, persistent_hubs[:5]))}")
 
+                # Confidence scales with data quality: more windows and
+                # clearer community structure yield higher confidence
+                n_windows = dn.get("n_windows", 1)
+                conf = round(min(0.7, 0.35 + 0.05 * n_windows), 2)
+
                 insights.append({
                     "type": "dynamic_network_evolution",
                     "residues": unstable_resids + persistent_hubs[:5],
-                    "description": f"Dynamic network analysis over {dn.get('n_windows', '?')} time windows "
+                    "description": f"Dynamic network analysis over {n_windows} time windows "
                                   f"shows mean community stability of {mean_stab:.2f}. "
-                                  f"{'Residues ' + ', '.join(map(str, unstable_resids[:5])) + ' frequently switch communities, suggesting they lie at domain interfaces or allosteric pathways. ' if unstable_resids else ''}"
-                                  f"{'Persistent hubs (' + ', '.join(map(str, persistent_hubs[:5])) + ') maintain high betweenness centrality throughout, indicating robust allosteric conduits.' if persistent_hubs else ''}",
-                    "confidence": 0.7,
+                                  f"{'Residues ' + ', '.join(map(str, unstable_resids[:5])) + ' frequently switch communities, suggesting they lie at domain interfaces. ' if unstable_resids else ''}"
+                                  f"{'Persistent hubs (' + ', '.join(map(str, persistent_hubs[:5])) + ') maintain high betweenness centrality throughout, suggesting potential communication relay points (requires experimental validation).' if persistent_hubs else ''}",
+                    "confidence": conf,
                     "evidence": evidence,
                     "category": "allosteric",
                 })
@@ -705,15 +730,17 @@ class BiologicalInferenceEngine:
                     evidence.append(f"Latent variance per dim: {', '.join(f'{v:.3f}' for v in latent_var)}")
 
                 quality = "good" if recon_error < 0.5 else "moderate" if recon_error < 1.0 else "poor"
+                # Confidence directly tied to reconstruction quality
+                conf = round(min(0.7, 0.3 + 0.4 * max(0.0, 1.0 - recon_error)), 2)
                 insights.append({
                     "type": "vae_conformational_landscape",
                     "residues": [],
                     "description": f"VAE with {latent_dim}D latent space achieves {quality} reconstruction "
                                   f"(MSE={recon_error:.4f}). "
-                                  f"{'Well-separated clusters in latent space suggest distinct conformational states. ' if latent_var and max(latent_var) > 0.5 else ''}"
-                                  f"The learned latent representation captures the dominant conformational "
-                                  f"degrees of freedom in a continuous, differentiable manifold.",
-                    "confidence": 0.65 if quality == "good" else 0.5,
+                                  f"{'Well-separated clusters in latent space suggest distinct conformational basins. ' if latent_var and max(latent_var) > 0.5 else ''}"
+                                  f"The latent representation provides a low-dimensional projection "
+                                  f"of the conformational landscape for exploratory visualization.",
+                    "confidence": conf,
                     "evidence": evidence,
                     "category": "transition",
                 })
@@ -752,7 +779,7 @@ class BiologicalInferenceEngine:
                     "type": "interaction_fingerprint",
                     "residues": list(set(resids)),
                     "description": " ".join(desc_parts),
-                    "confidence": 0.7,
+                    "confidence": round(min(0.75, 0.4 + 0.03 * len(top)), 2),
                     "evidence": evidence,
                     "category": "structural",
                 })
@@ -995,13 +1022,14 @@ class BiologicalInferenceEngine:
             insights.append({
                 "type": "cryptic_binding_site",
                 "residues": list(set(bn_resids + gating_residues))[:15],
-                "description": f"Potential cryptic binding site detected. Cavity volume fluctuations "
-                              f"and flexible bottleneck residues suggest a transient pocket that opens "
+                "description": f"Candidate cryptic binding site detected. Cavity volume fluctuations "
+                              f"and flexible bottleneck residues suggest a transient pocket that may open "
                               f"during simulation but is absent in the static structure. "
                               f"{'Gating residues ' + ', '.join(map(str, gating_residues[:5])) + ' control access to this pocket. ' if gating_residues else ''}"
-                              f"Cryptic sites are high-value drug targets accessible only through "
-                              f"conformational dynamics.",
-                "confidence": round(min(0.85, confidence), 2),
+                              f"Note: transient cavity detection is not equivalent to validated "
+                              f"druggable pocket identification. Use FPocket, SiteMap, or mixed-solvent "
+                              f"MD for more rigorous cryptic site characterisation.",
+                "confidence": round(min(0.65, confidence), 2),
                 "evidence": evidence,
                 "category": "binding",
             })
@@ -1211,7 +1239,7 @@ class BiologicalInferenceEngine:
                               f"requires kinase/transferase recognition motifs (sequence context) which "
                               f"are not evaluated here. Use tools like NetPhos, GPS, or kinase-specific "
                               f"predictors for sequence-based PTM prediction.",
-                "confidence": round(min(0.8, 0.5 + 0.05 * len(ptm_candidates)), 2),
+                "confidence": round(min(0.65, 0.4 + 0.03 * len(ptm_candidates)), 2),
                 "evidence": evidence,
                 "category": "structural",
             })
@@ -1294,12 +1322,14 @@ class BiologicalInferenceEngine:
             insights.append({
                 "type": "ppi_interface_hotspot",
                 "residues": resid_list,
-                "description": f"Predicted protein-protein interaction hotspots: {len(top_hotspots)} "
-                              f"surface residues with complementary properties for PPI interfaces. "
+                "description": f"Candidate protein-protein interaction hotspots: {len(top_hotspots)} "
+                              f"surface residues with properties associated with PPI interfaces. "
                               f"Top candidates: {', '.join(c['resname'] + str(c['resid']) for c in top_hotspots[:5])}. "
                               f"These residues combine moderate flexibility, surface exposure, and "
-                              f"hydrophobic/aromatic character — hallmarks of PPI interface patches.",
-                "confidence": round(min(0.75, 0.45 + 0.03 * len(top_hotspots)), 2),
+                              f"hydrophobic/aromatic character. Note: PPI hotspot prediction from "
+                              f"dynamics alone is speculative; validate with docking, cross-linking "
+                              f"MS, or mutagenesis data.",
+                "confidence": round(min(0.6, 0.35 + 0.02 * len(top_hotspots)), 2),
                 "evidence": evidence,
                 "category": "binding",
             })
@@ -1368,12 +1398,13 @@ class BiologicalInferenceEngine:
             insights.append({
                 "type": "interface_conformational_selection",
                 "residues": resid_list,
-                "description": f"Identified {len(switching_residues)} residues undergoing order-disorder transitions, "
-                              f"characteristic of conformational selection mechanisms. These residues "
-                              f"alternate between structured and disordered states, potentially "
-                              f"becoming ordered upon binding a partner protein (folding-upon-binding). "
+                "description": f"Identified {len(switching_residues)} residues undergoing order-disorder transitions. "
+                              f"These residues alternate between structured and disordered states, "
+                              f"which may be consistent with conformational selection mechanisms "
+                              f"(folding-upon-binding). However, order-disorder switching can also "
+                              f"reflect intrinsic flexibility without functional relevance. "
                               f"Key switching residues: {', '.join(map(str, resid_list[:5]))}.",
-                "confidence": round(min(0.75, 0.5 + 0.03 * len(switching_residues)), 2),
+                "confidence": round(min(0.6, 0.35 + 0.02 * len(switching_residues)), 2),
                 "evidence": evidence,
                 "category": "binding",
             })

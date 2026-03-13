@@ -164,7 +164,7 @@ def build_msm(
         )
 
         # ── Chapman-Kolmogorov self-consistency test ───────────
-        ck_test = _chapman_kolmogorov_test(T, lag_time, n_states)
+        ck_test = _chapman_kolmogorov_test(T, lag_time, n_states, labels)
 
         return {
             "transition_matrix": T.tolist(),
@@ -276,16 +276,20 @@ def _chapman_kolmogorov_test(
     T: np.ndarray,
     lag_time: int,
     n_states: int,
+    labels: np.ndarray,
     n_steps: int = 5,
 ) -> Dict[str, Any]:
     """Chapman-Kolmogorov self-consistency test.
 
     Compares T(k*tau) predicted by T(tau)^k against the directly
-    estimated T(k*tau).  If the MSM is Markovian, these should agree.
+    estimated T(k*tau) from trajectory data.  If the MSM is Markovian,
+    these should agree.
 
-    Returns predicted and estimated diagonal elements for each step.
+    Returns predicted and estimated diagonal elements for each step,
+    plus a max-absolute-deviation metric.
     """
     predicted: List[List[float]] = []
+    estimated: List[List[float]] = []
     steps = list(range(1, n_steps + 1))
 
     T_power = np.eye(n_states)
@@ -293,14 +297,29 @@ def _chapman_kolmogorov_test(
         T_power = T_power @ T
         predicted.append([round(float(T_power[i, i]), 4) for i in range(n_states)])
 
+        # Directly estimate T(k * tau) from trajectory data
+        T_direct = _build_reversible_T(labels, n_states, lag_time * k)
+        if T_direct is not None:
+            estimated.append([round(float(T_direct[i, i]), 4) for i in range(n_states)])
+        else:
+            estimated.append([0.0] * n_states)
+
+    # Compute max absolute deviation between predicted and estimated
+    max_deviation: float = 0.0
+    for pred_row, est_row in zip(predicted, estimated):
+        for pv, ev in zip(pred_row, est_row):
+            max_deviation = max(max_deviation, abs(pv - ev))
+
     return {
         "steps": steps,
         "lag_time": lag_time,
         "predicted_self_transition": predicted,
+        "estimated_self_transition": estimated,
+        "max_deviation": round(max_deviation, 4),
+        "is_markovian": max_deviation < 0.1,
         "description": (
-            "Chapman-Kolmogorov test: predicted T(tau)^k diagonal elements. "
-            "If the model is Markovian, these should match directly estimated "
-            "T(k*tau). Monotonically decreasing self-transition probabilities "
-            "are expected."
+            "Chapman-Kolmogorov test: compares T(tau)^k (predicted) against "
+            "directly estimated T(k*tau) (estimated). Small deviations "
+            "(max_deviation < 0.1) indicate a valid Markov model."
         ),
     }

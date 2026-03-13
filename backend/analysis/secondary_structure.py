@@ -75,6 +75,8 @@ def compute_secondary_structure(
         chain = topology.add_chain()
         prev_resid: int | None = None
         residue_map: dict[int, Any] = {}
+        # Track atoms for bond inference
+        mdtraj_atoms: list[Any] = []
         for atom in protein:
             if atom.resid != prev_resid:
                 res = topology.add_residue(atom.resname, chain)
@@ -84,7 +86,14 @@ def compute_secondary_structure(
                 element = md.element.Element.getBySymbol(atom.element)
             except Exception:
                 element = md.element.carbon
-            topology.add_atom(atom.name, element, residue_map[atom.resid])
+            mdtraj_atoms.append(
+                topology.add_atom(atom.name, element, residue_map[atom.resid])
+            )
+
+        # Add bonds using MDTraj's standard residue templates so that
+        # DSSP can correctly identify backbone atoms and compute the
+        # hydrogen-bond energy criterion.
+        topology.create_standard_bonds()
 
         traj = md.Trajectory(positions, topology)
         dssp_result: np.ndarray = md.compute_dssp(traj, simplified=True)

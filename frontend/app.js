@@ -346,9 +346,50 @@ async function fetchResults(jobId) {
 
 function renderResults() {
     renderStats();
+    renderCaveats();
     renderPlots();
     renderInsights();
     switchSection('results');
+}
+
+// ===== Methodology Caveats =====
+function renderCaveats() {
+    const existing = document.getElementById('caveats-section');
+    if (existing) existing.remove();
+
+    const notes = [];
+    const bk = analysisResults.binding_kinetics || {};
+    const ed = analysisResults.energy_decomposition || {};
+
+    if (bk.kinetics_caveat) notes.push({ label: 'Binding Kinetics', text: bk.kinetics_caveat });
+    if (ed.caveat) notes.push({ label: 'Energy Decomposition', text: ed.caveat });
+
+    if (notes.length === 0) return;
+
+    const section = document.createElement('div');
+    section.id = 'caveats-section';
+    section.className = 'card';
+    section.style.cssText = 'border-color: rgba(251,191,36,0.3);';
+    section.innerHTML = `
+        <div class="card-header">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-yellow)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <h2 style="font-size:1rem;">Methodology Notes</h2>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:0 4px 8px;">
+            ${notes.map(n => `
+                <div style="font-size:0.82rem;color:var(--text-muted);border-left:3px solid rgba(251,191,36,0.4);padding-left:12px;">
+                    <strong style="color:var(--accent-yellow);font-size:0.8rem;">${n.label}:</strong> ${n.text}
+                </div>
+            `).join('')}
+        </div>`;
+
+    const statsCard = document.querySelector('#section-results .card');
+    if (statsCard && statsCard.parentNode) {
+        statsCard.parentNode.insertBefore(section, statsCard.nextSibling);
+    }
 }
 
 // ===== Stats Grid =====
@@ -360,6 +401,12 @@ function renderStats() {
     const clustering = analysisResults.clustering || {};
     const convergence = analysisResults.convergence || {};
     const bk = analysisResults.binding_kinetics || {};
+    const msm = analysisResults.msm_results || {};
+    const ck = msm.ck_test || {};
+
+    const markovianVal = ck.is_markovian != null
+        ? (ck.is_markovian ? 'Yes' : 'No')
+        : 'N/A';
 
     const stats = [
         { value: info.n_frames || 'N/A', label: 'Frames' },
@@ -372,6 +419,7 @@ function renderStats() {
         { value: clustering.n_clusters || 'N/A', label: 'Clusters' },
         { value: convergence.convergence_score != null ? `${(convergence.convergence_score * 100).toFixed(0)}%` : 'N/A', label: 'Convergence' },
         { value: bk.total_contact_fraction != null ? `${(bk.total_contact_fraction * 100).toFixed(0)}%` : 'N/A', label: 'Contact Frac.' },
+        { value: markovianVal, label: 'Markovian' },
     ];
 
     const grid = document.getElementById('stats-grid');
@@ -404,7 +452,7 @@ const plotNameMap = {
     gnn_plot: 'GNN', transformer_plot: 'Transformer', msm_plot: 'MSM',
     tica_plot: 'tICA', water_bridges_plot: 'Water Bridges', energy_plot: 'Energy Decomp.',
     prs_plot: 'PRS', nma_plot: 'Normal Modes', entropy_plot: 'Entropy',
-    ifp_plot: 'Interaction FP', tunnel_plot: 'Tunnels/Cavities',
+    ifp_plot: 'Interaction FP', tunnel_plot: 'Cavities/Voids',
     vae_plot: 'VAE Latent', dynamic_network_plot: 'Dynamic Network',
     convergence_plot: 'Convergence', binding_kinetics_plot: 'Binding Kinetics',
     network_graph_plot: 'Allosteric Network', training_loss_plot: 'Training Losses',
@@ -467,7 +515,7 @@ const insightTypeLabels = {
     binding_pocket: 'Binding Pocket', conformational_states: 'Conformational States',
     metastable_kinetics: 'Metastable Kinetics', domain_motion: 'Domain Motion',
     stability_assessment: 'Stability Assessment', gnn_key_residues: 'GNN Key Residues',
-    transformer_transitions: 'Transformer Transitions',
+    transformer_transitions: 'Temporal Change-Points',
     water_bridge_sites: 'Water Bridge Sites', energy_hotspot: 'Energy Hotspot',
     prs_effectors_sensors: 'PRS Effectors/Sensors', nma_collective_motion: 'NMA Collective Motion',
     entropy_estimate: 'Entropy Estimate', cavity_channels: 'Cavity Channels',

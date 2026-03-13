@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-"""Simplified Tunnel / Cavity Detection.
+"""Cavity / Void Detection.
 
 Identifies persistent cavities and solvent-accessible voids around the
 protein using a grid-based probe approach with optional Delaunay
 tessellation.
+
+**Note**: This module detects static cavity volumes per frame, not
+connected tunnels (paths from interior to exterior).  For true tunnel
+tracing, use dedicated tools such as CAVER or MOLE.
 """
 
 import logging
@@ -32,6 +36,9 @@ def detect_tunnels(
     are within the protein bounding box (plus padding), far enough from
     protein atoms to be solvent-accessible, yet close enough not to be
     bulk solvent.
+
+    **Note**: This detects per-frame cavity volumes, not connected
+    tunnels.  Use CAVER or MOLE for connected-path tunnel analysis.
 
     Parameters
     ----------

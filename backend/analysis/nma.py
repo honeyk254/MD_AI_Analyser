@@ -191,10 +191,14 @@ def _build_anm_hessian_vectorised(
     # Spring constants: uniform gamma within cutoff (standard ANM, Bahar et al. 1997)
     k_values: np.ndarray = np.where(mask, -gamma, 0.0)  # (n, n)
 
-    # 3x3 super-elements for all pairs:
-    # H_ij[a,b] = k_values[i,j] * diff[i,j,a] * diff[i,j,b]
+    # 3x3 super-elements for all pairs (Atilgan et al. 2001, Biophys. J.):
+    # H_ij[a,b] = -gamma * dr_ij[a] * dr_ij[b] / |r_ij|^2
+    # The 1/|r_ij|^2 normalisation ensures the restoring force magnitude
+    # is distance-independent (uniform spring constant), which is the
+    # defining property of the ANM.
+    dist_sq_safe: np.ndarray = np.where(mask, dist_sq, 1.0)  # avoid div-by-zero
     super_elements: np.ndarray = (
-        k_values[:, :, np.newaxis, np.newaxis]
+        (k_values / dist_sq_safe)[:, :, np.newaxis, np.newaxis]
         * diff[:, :, :, np.newaxis]
         * diff[:, :, np.newaxis, :]
     )  # (n, n, 3, 3)
