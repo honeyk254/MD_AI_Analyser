@@ -139,48 +139,74 @@ class AnalysisOrchestrator:
 
     def _load_jobs_from_disk(self) -> None:
         """Scan RESULTS_DIR and restore completed/failed jobs on startup."""
+        import re
+        _JOB_ID_RE = re.compile(r'^[0-9a-f]{8}$')
+
         for job_dir in sorted(RESULTS_DIR.iterdir()):
             if not job_dir.is_dir():
                 continue
-            meta_path = job_dir / "meta.json"
-            if not meta_path.exists():
+            raw_id = job_dir.name
+            if not _JOB_ID_RE.match(raw_id):
                 continue
-            try:
-                meta = json.loads(meta_path.read_text())
-                job_id = meta["job_id"]
-                if job_id in self.jobs:
-                    continue
+            if raw_id in self.jobs:
+                continue
 
-                result: Optional[AnalysisResult] = None
-                result_path = job_dir / "result.json"
-                if result_path.exists():
-                    try:
-                        result = AnalysisResult.model_validate(
-                            json.loads(result_path.read_text())
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            "Could not restore result.json for %s: %s", job_id, exc
-                        )
+            meta_path = job_dir / "meta.json"
+            html_path = job_dir / "analysis_report.html"
 
+            if meta_path.exists():
+                # Full restore from meta.json + result.json (new-style runs)
                 try:
-                    status = AnalysisStatus(meta.get("status", "completed"))
-                except ValueError:
-                    status = AnalysisStatus.COMPLETED
+                    meta = json.loads(meta_path.read_text())
+                    job_id = meta["job_id"]
+                    if job_id in self.jobs:
+                        continue
 
-                self.jobs[job_id] = {
-                    "status": status,
-                    "files": meta.get("files", {}),
-                    "result": result,
-                    "progress": 100.0 if status == AnalysisStatus.COMPLETED else 0.0,
-                    "current_module": "done" if status == AnalysisStatus.COMPLETED else "failed",
-                    "message": "Loaded from disk",
-                    "job_dir": meta["job_dir"],
-                    "created_at": meta.get("created_at", 0.0),
+                    result: Optional[AnalysisResult] = None
+                    result_path = job_dir / "result.json"
+                    if result_path.exists():
+                        try:
+                            result = AnalysisResult.model_validate(
+                                json.loads(result_path.read_text())
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "Could not restore result.json for %s: %s", job_id, exc
+                            )
+
+                    try:
+                        status = AnalysisStatus(meta.get("status", "completed"))
+                    except ValueError:
+                        status = AnalysisStatus.COMPLETED
+
+                    self.jobs[job_id] = {
+                        "status": status,
+                        "files": meta.get("files", {}),
+                        "result": result,
+                        "progress": 100.0 if status == AnalysisStatus.COMPLETED else 0.0,
+                        "current_module": "done" if status == AnalysisStatus.COMPLETED else "failed",
+                        "message": "Loaded from disk",
+                        "job_dir": meta["job_dir"],
+                        "created_at": meta.get("created_at", 0.0),
+                    }
+                    logger.info("Restored job from disk: %s (status=%s)", job_id, status.value)
+                except Exception as exc:
+                    logger.warning("Could not restore job from %s: %s", job_dir, exc)
+
+            elif html_path.exists():
+                # Legacy run — only the HTML report exists, no meta.json or result.json
+                created_at = html_path.stat().st_mtime
+                self.jobs[raw_id] = {
+                    "status": AnalysisStatus.COMPLETED,
+                    "files": {},
+                    "result": None,
+                    "progress": 100.0,
+                    "current_module": "done",
+                    "message": "Legacy run — report available for download",
+                    "job_dir": str(job_dir),
+                    "created_at": created_at,
                 }
-                logger.info("Restored job from disk: %s (status=%s)", job_id, status.value)
-            except Exception as exc:
-                logger.warning("Could not restore job from %s: %s", job_dir, exc)
+                logger.info("Restored legacy job stub from disk: %s", raw_id)
 
     _bio_engine: Any = None
 

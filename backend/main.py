@@ -383,15 +383,21 @@ async def get_report(job_id: str) -> FileResponse:
     """Download the HTML analysis report."""
     _validate_job_id(job_id)
     job = orchestrator.get_job(job_id)
-    if not job or not job.get("result"):
+    if not job:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    report_path = job["result"].plots.get("report_html")
-    if report_path and Path(report_path).exists():
-        return FileResponse(
-            report_path, media_type="text/html",
-            filename=f"md_report_{job_id}.html",
-        )
+    # Prefer the path stored in result, then fall back to job_dir on disk
+    if job.get("result"):
+        stored = job["result"].plots.get("report_html")
+        if stored and Path(stored).exists():
+            return FileResponse(stored, media_type="text/html",
+                                filename=f"md_report_{job_id}.html")
+
+    fallback = Path(job["job_dir"]) / "analysis_report.html"
+    if fallback.exists():
+        return FileResponse(str(fallback), media_type="text/html",
+                            filename=f"md_report_{job_id}.html")
+
     raise HTTPException(status_code=404, detail="Report file not found")
 
 
@@ -400,15 +406,23 @@ async def get_csv(job_id: str) -> FileResponse:
     """Download the CSV metrics export."""
     _validate_job_id(job_id)
     job = orchestrator.get_job(job_id)
-    if not job or not job.get("result"):
+    if not job:
         raise HTTPException(status_code=404, detail="CSV not found")
 
-    csv_path = job["result"].plots.get("csv_metrics")
-    if csv_path and Path(csv_path).exists():
-        return FileResponse(
-            csv_path, media_type="text/csv",
-            filename=f"md_metrics_{job_id}.csv",
-        )
+    # Prefer path from result, then try known filenames on disk
+    if job.get("result"):
+        stored = job["result"].plots.get("csv_metrics")
+        if stored and Path(stored).exists():
+            return FileResponse(stored, media_type="text/csv",
+                                filename=f"md_metrics_{job_id}.csv")
+
+    job_dir = Path(job["job_dir"])
+    for name in ("analysis_report.csv", "metrics.csv"):
+        candidate = job_dir / name
+        if candidate.exists():
+            return FileResponse(str(candidate), media_type="text/csv",
+                                filename=f"md_metrics_{job_id}.csv")
+
     raise HTTPException(status_code=404, detail="CSV file not found")
 
 

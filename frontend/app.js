@@ -366,10 +366,11 @@ function renderHistory(jobs) {
     list.innerHTML = jobs.map(job => {
         const date = job.created_at ? new Date(job.created_at * 1000).toLocaleString() : '—';
         const info = job.trajectory_info || {};
+        const isLegacy = !Object.keys(job.files || {}).length && !info.n_frames;
         const statusClass = job.status === 'completed' ? 'history-status-ok'
             : job.status === 'failed' ? 'history-status-err' : 'history-status-run';
         const fileNames = Object.values(job.files || {}).filter(Boolean);
-        const filesLabel = fileNames.length ? fileNames.join(', ') : '—';
+        const filesLabel = isLegacy ? '<em>report only</em>' : (fileNames.length ? fileNames.join(', ') : '—');
         const parts = [];
         if (info.n_frames) parts.push(`${info.n_frames} frames`);
         if (info.n_residues) parts.push(`${info.n_residues} residues`);
@@ -392,8 +393,31 @@ function renderHistory(jobs) {
 async function loadHistoryJob(jobId) {
     currentJobId = jobId;
     showToast(`Loading run ${jobId}…`, 'info');
-    await fetchResults(jobId);
-    switchSection('results');
+
+    try {
+        const resp = await fetch(`/api/results/${jobId}`);
+        const data = await resp.json();
+
+        // Legacy stub — report exists on disk but no full result was persisted
+        if (!data.plots || Object.keys(data.plots).length === 0) {
+            showToast('Legacy run — full results unavailable. HTML report and CSV are still downloadable.', 'warning', 6000);
+            switchSection('downloads');
+            return;
+        }
+
+        analysisResults = data;
+        renderResults();
+
+        try {
+            const structResp = await fetch(`/api/structure/${jobId}`);
+            structureData = await structResp.text();
+        } catch (_) {}
+
+        switchSection('results');
+    } catch (e) {
+        console.error('Failed to load history job:', e);
+        showToast('Failed to load run ' + jobId, 'error');
+    }
 }
 
 function renderResults() {
