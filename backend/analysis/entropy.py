@@ -61,20 +61,26 @@ def compute_entropy(
     dict[str, Any]
         Keys:
 
-        * ``total_entropy_J_mol_K`` -- total entropy in J/(mol*K).
-        * ``total_entropy_kJ_mol_K`` -- total entropy in kJ/(mol*K).
-        * ``per_residue_entropy`` -- per-residue entropy contribution.
+        * ``global_entropy_J_mol_K`` -- physically rigorous upper bound
+          computed from the full covariance matrix.
+        * ``total_entropy_J_mol_K`` -- alias for ``global_entropy_J_mol_K``.
+        * ``total_entropy_kJ_mol_K`` -- global entropy in kJ/(mol*K).
+        * ``per_residue_entropy`` -- per-residue entropy contribution
+          under the "Independent Residue Approximation."
         * ``resids`` -- residue IDs.
-        * ``entropy_convergence`` -- entropy computed from increasing
+        * ``entropy_convergence`` -- global entropy computed from increasing
           trajectory fractions (20 %, 40 %, ..., 100 %).
         * ``temperature_K`` -- temperature used.
         * ``n_frames_used`` -- total number of frames.
 
     Notes
     -----
-    Positions are converted from angstrom to metres and masses from AMU
-    to kg so that the covariance matrix has SI units (kg*m**2) and the
-    Schlitter formula is applied consistently.
+    **Independent Residue Approximation**: The ``per_residue_entropy`` values
+    are computed by considering each residue's degrees of freedom in isolation.
+    Summing these values will significantly overestimate the total entropy
+    because it ignores all cross-residue correlations. Use the
+    ``global_entropy_J_mol_K`` for a physically meaningful (though still
+    upper-bound) estimate of the system's configurational entropy.
     """
     try:
         ca: mda.AtomGroup = select_ca_atoms(universe)
@@ -101,10 +107,11 @@ def compute_entropy(
         pos_m: np.ndarray = positions * ANG_TO_M          # metres
         masses_kg: np.ndarray = masses * AMU_TO_KG         # kg
 
-        # Full-trajectory entropy
-        total_entropy: float = _schlitter_entropy(pos_m, masses_kg, temperature)
+        # Full-trajectory entropy (Global)
+        global_entropy: float = _schlitter_entropy(pos_m, masses_kg, temperature)
 
-        # Per-residue entropy (3 DOF each)
+        # Per-residue entropy (3 DOF each) - Independent Residue Approximation
+        logger.info("Computing per-residue entropy using Independent Residue Approximation (ignoring correlations)")
         per_res_entropy: np.ndarray = _per_residue_entropy(
             pos_m, masses_kg, temperature
         )
@@ -124,20 +131,27 @@ def compute_entropy(
             )
 
         logger.info(
-            "Entropy (Schlitter) at T=%.1f K: %.2f J/(mol*K) from %d frames",
+            "Global Entropy (Schlitter) at T=%.1f K: %.2f J/(mol*K) from %d frames. "
+            "This is the physically rigorous upper bound.",
             temperature,
-            total_entropy,
+            global_entropy,
             n_frames,
         )
 
         return {
-            "total_entropy_J_mol_K": round(float(total_entropy), 2),
-            "total_entropy_kJ_mol_K": round(float(total_entropy / 1000.0), 4),
+            "global_entropy_J_mol_K": round(float(global_entropy), 2),
+            "total_entropy_J_mol_K": round(float(global_entropy), 2),
+            "total_entropy_kJ_mol_K": round(float(global_entropy / 1000.0), 4),
             "per_residue_entropy": [round(float(x), 3) for x in per_res_entropy],
             "resids": resids,
             "entropy_convergence": convergence,
             "temperature_K": temperature,
             "n_frames_used": n_frames,
+            "approximation_warning": (
+                "Per-residue entropy values use the Independent Residue Approximation, "
+                "which ignores cross-correlations and overestimates total entropy. "
+                "Refer to global_entropy_J_mol_K for the rigorous system-level upper bound."
+            )
         }
 
     except Exception as e:

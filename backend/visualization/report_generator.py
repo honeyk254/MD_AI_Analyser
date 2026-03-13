@@ -68,7 +68,7 @@ def generate_html_report(result: Any, output_dir: Path) -> Path:
         "tica_plot": "tICA Slow Motions",
         "salt_bridges_plot": "Salt Bridges",
         "water_bridges_plot": "Water Bridges",
-        "energy_plot": "Energy Decomposition",
+        "energy_plot": "Interaction Score Decomposition",
         "prs_plot": "Perturbation Response Scanning",
         "nma_plot": "Normal Mode Analysis",
         "entropy_plot": "Configurational Entropy",
@@ -286,11 +286,11 @@ def export_csv(result: Any, output_dir: Path) -> Path:
     if isinstance(ent, dict) and "total_entropy_kJ_mol_K" in ent:
         rows.append({"metric": "Entropy_total", "value": ent["total_entropy_kJ_mol_K"], "unit": "kJ/mol/K"})
 
-    # Energy decomposition
+    # Interaction score decomposition
     energy: Any = result.energy_decomposition
-    if isinstance(energy, dict) and "total_energy" in energy:
-        for r, v in zip(energy.get("resids", []), energy["total_energy"]):
-            rows.append({"metric": "Energy_per_residue", "residue": r, "value": v, "unit": "kJ/mol"})
+    if isinstance(energy, dict) and "total_interaction_score" in energy:
+        for r, v in zip(energy.get("resids", []), energy["total_interaction_score"]):
+            rows.append({"metric": "InteractionScore_per_residue", "residue": r, "value": v, "unit": "score"})
 
     # NMA B-factors
     nma: Any = result.nma

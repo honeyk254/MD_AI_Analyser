@@ -5,11 +5,11 @@ Graph Neural Network models for residue-level protein analysis.
 
 Implements a GAT + GCN hybrid architecture for learning residue importance,
 detecting allosteric pathways, and identifying communication hubs from
-dynamic residue interaction graphs.
+ensemble-averaged residue interaction graphs.
 """
 
 import logging
-from typing import Any
+from typing import Any, Dict
 
 import numpy as np
 import torch
@@ -24,6 +24,18 @@ from ..utils.trajectory_utils import (
 from ..utils.ml_feature_utils import set_global_seed
 
 logger = logging.getLogger("md_ai_analyzer")
+
+# Residue property mappings for node features
+_HYDROPHOBICITY: Dict[str, float] = {
+    "ALA": 1.8, "ARG": -4.5, "ASN": -3.5, "ASP": -3.5, "CYS": 2.5,
+    "GLN": -3.5, "GLU": -3.5, "GLY": -0.4, "HIS": -3.2, "ILE": 4.5,
+    "LEU": 3.8, "LYS": -3.9, "MET": 1.9, "PHE": 2.8, "PRO": -1.6,
+    "SER": -0.8, "THR": -0.7, "TRP": -0.9, "TYR": -1.3, "VAL": 4.2,
+}
+
+_CHARGE: Dict[str, float] = {
+    "ARG": 1.0, "LYS": 1.0, "HIS": 0.1, "ASP": -1.0, "GLU": -1.0,
+}
 
 
 # ── GNN Model (module-level) ────────────────────────────────────
@@ -94,13 +106,13 @@ class ResidueGNN(nn.Module):
 # ── Main analysis entry point ───────────────────────────────────
 
 def run_gnn_analysis(universe: Any, **kwargs: Any) -> dict[str, Any]:
-    """Run GNN-based analysis on dynamic residue interaction graphs.
+    """Run GNN-based analysis on ensemble-averaged residue interaction graphs.
 
     The pipeline:
 
-    1. Builds per-frame residue contact graphs from Calpha positions.
-    2. Computes node features (average contacts, displacement
-       fluctuations, sequence position).
+    1. Builds an ensemble-averaged residue contact graph from Calpha positions.
+    2. Computes node features (average contacts, residue hydrophobicity,
+       residue charge, sequence position).
     3. Trains a GAT+GCN hybrid to predict per-residue RMSF in a
        self-supervised fashion.
     4. Extracts learned attention weights and embeddings to rank residues
@@ -108,9 +120,7 @@ def run_gnn_analysis(universe: Any, **kwargs: Any) -> dict[str, Any]:
 
     **Note**: The GNN learns to predict RMSF from graph structure.
     Residue importance scores reflect graph-topological distinctiveness,
-    not independently validated functional importance.  Do not interpret
-    high-scoring residues as experimentally confirmed functional sites
-    without additional validation.
+    not independently validated functional importance.
 
     Parameters
     ----------
@@ -148,6 +158,7 @@ def run_gnn_analysis(universe: Any, **kwargs: Any) -> dict[str, Any]:
         ca = select_ca_atoms(universe)
         n_res = len(ca)
         resids: list[int] = ca.resids.tolist()
+        resnames: list[str] = ca.resnames.tolist()
 
         # ── Compute node features ────────────────────────────────
         # Note: RMSF is used as the prediction TARGET (not an input feature)
@@ -165,17 +176,20 @@ def run_gnn_analysis(universe: Any, **kwargs: Any) -> dict[str, Any]:
 
         contact_counts /= n_frames
 
-        # Feature 2: Position fluctuation magnitude (from shared util)
-        fluctuations: np.ndarray = compute_fluctuations(positions_all)
+        # Feature 2 & 3: Hydrophobicity and Charge
+        # These are scientifically relevant and avoid RMSF data leakage
+        hydrophobicity = np.array([_HYDROPHOBICITY.get(rn, 0.0) for rn in resnames])
+        charge = np.array([_CHARGE.get(rn, 0.0) for rn in resnames])
 
-        # Feature 3: Sequence position (normalised)
+        # Feature 4: Sequence position (normalised)
         seq_position = np.arange(n_res, dtype=np.float32) / max(n_res - 1, 1)
 
         # Build node feature matrix [n_res, n_features]
-        # Deliberately excludes RMSF to avoid circular prediction
+        # RMSF is deliberately excluded here to prevent circular prediction
         node_features = np.column_stack([
             contact_counts / (contact_counts.max() + 1e-8),
-            fluctuations / (fluctuations.max() + 1e-8),
+            hydrophobicity / 5.0,  # approximate scale normalization
+            charge,                # naturally scaled around -1 to +1
             seq_position,
         ]).astype(np.float32)
 

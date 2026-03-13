@@ -735,39 +735,39 @@ def _plot_water_bridges(data: dict[str, Any]) -> Optional[go.Figure]:
 
 @safe_plot
 def _plot_energy_decomposition(data: dict[str, Any]) -> Optional[go.Figure]:
-    """Per-residue energy decomposition (total, VdW, electrostatic).
+    """Per-residue interaction score decomposition (total, VdW, electrostatic).
 
     Parameters
     ----------
     data : dict
-        Must contain ``resids`` and ``total_energy``.
+        Must contain ``resids`` and ``total_interaction_score``.
 
     Returns
     -------
     go.Figure or None
     """
     resids = data.get("resids", [])
-    total = data.get("total_energy", [])
+    total = data.get("total_interaction_score", [])
     if not resids or not total:
         return None
 
     fig = make_subplots(
         rows=2, cols=1,
-        subplot_titles=("Per-Residue Total Interaction Energy", "VdW vs Electrostatic"),
+        subplot_titles=("Per-Residue Total Interaction Score", "VdW vs Electrostatic Proximity"),
     )
     fig.add_trace(go.Bar(
-        x=resids, y=total, marker_color=ACCENT_ORANGE, name="Total",
+        x=resids, y=total, marker_color=ACCENT_ORANGE, name="Total Score",
     ), row=1, col=1)
     fig.add_trace(go.Bar(
-        x=resids, y=data.get("vdw_energy", []),
-        marker_color=ACCENT_DARK_TEAL, name="VdW",
+        x=resids, y=data.get("vdw_proximity_score", []),
+        marker_color=ACCENT_DARK_TEAL, name="VdW Proximity",
     ), row=2, col=1)
     fig.add_trace(go.Bar(
-        x=resids, y=data.get("elec_energy", []),
-        marker_color="#fdcb6e", name="Electrostatic",
+        x=resids, y=data.get("elec_proximity_score", []),
+        marker_color="#fdcb6e", name="Electrostatic Proximity",
     ), row=2, col=1)
     return apply_dark_theme(
-        fig, "Per-Residue Energy Decomposition", height=600,
+        fig, "Per-Residue Interaction Score Decomposition", height=600,
     )
 
 

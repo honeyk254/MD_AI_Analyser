@@ -35,6 +35,7 @@ def build_msm(
     universe: Any,
     n_states: Optional[int] = None,
     lag_time: int = 5,
+    reversible: bool = True,
     **kwargs: Any,
 ) -> Dict[str, Any]:
     """Build a Markov State Model from trajectory clustering.
@@ -48,6 +49,9 @@ def build_msm(
         automatically via silhouette analysis.
     lag_time : int
         Lag time (in frames) used to build the count matrix.
+    reversible : bool
+        Whether to enforce detailed balance (reversibility) by
+        symmetrising the count matrix.
     **kwargs
         Additional keyword arguments (unused; accepted for orchestrator
         compatibility).
@@ -96,19 +100,11 @@ def build_msm(
         km = KMeans(n_clusters=n_states, n_init=10, random_state=42)
         labels: np.ndarray = km.fit_predict(reduced_5d)
 
-        # ── Build count matrix (vectorised) ──────────────────────
-        count_matrix = np.zeros((n_states, n_states), dtype=np.float64)
-        src = labels[: len(labels) - lag_time]
-        dst = labels[lag_time:]
-        np.add.at(count_matrix, (src, dst), 1)
+        # ── Build transition matrix ──────────────────────────────
+        T = _build_transition_matrix(labels, n_states, lag_time, reversible=reversible)
 
-        # Enforce detailed balance via count matrix symmetrisation
-        count_matrix = (count_matrix + count_matrix.T) / 2.0
-
-        # ── Row-normalise to get transition matrix ───────────────
-        row_sums = count_matrix.sum(axis=1, keepdims=True)
-        row_sums[row_sums == 0] = 1.0
-        T = count_matrix / row_sums
+        if T is None:
+            return {"error": "Could not build transition matrix"}
 
         # Validate stochastic matrix (rows should sum to 1)
         row_sum_check = T.sum(axis=1)
@@ -152,19 +148,20 @@ def build_msm(
         metastable.sort(key=lambda x: -x["self_transition"])
 
         logger.info(
-            "MSM built: %d states, lag=%d, top timescale=%.1f.",
+            "MSM built: %d states, lag=%d, reversible=%s, top timescale=%.1f.",
             n_states,
             lag_time,
+            reversible,
             timescales[0] if timescales else 0.0,
         )
 
         # ── Implied timescale convergence (lag-time sweep) ─────
         its_convergence = _implied_timescale_sweep(
-            labels, n_states, lag_time, len(labels)
+            labels, n_states, lag_time, len(labels), reversible=reversible
         )
 
         # ── Chapman-Kolmogorov self-consistency test ───────────
-        ck_test = _chapman_kolmogorov_test(T, lag_time, n_states, labels)
+        ck_test = _chapman_kolmogorov_test(T, lag_time, n_states, labels, reversible=reversible)
 
         return {
             "transition_matrix": T.tolist(),
@@ -223,10 +220,22 @@ def _compute_mfpt(T: np.ndarray, n_states: int) -> np.ndarray:
     return mfpt
 
 
-def _build_reversible_T(
-    labels: np.ndarray, n_states: int, lag: int,
+def _build_transition_matrix(
+    labels: np.ndarray, n_states: int, lag: int, reversible: bool = True
 ) -> Optional[np.ndarray]:
-    """Build a reversible transition matrix at a given lag time."""
+    """Build a transition matrix at a given lag time.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        Per-frame cluster labels.
+    n_states : int
+        Number of states.
+    lag : int
+        Lag time in frames.
+    reversible : bool
+        Whether to enforce detailed balance by symmetrising the count matrix.
+    """
     n = len(labels)
     if lag >= n:
         return None
@@ -234,7 +243,10 @@ def _build_reversible_T(
     src = labels[: n - lag]
     dst = labels[lag:]
     np.add.at(C, (src, dst), 1)
-    C = (C + C.T) / 2.0  # enforce detailed balance
+
+    if reversible:
+        C = (C + C.T) / 2.0  # enforce detailed balance
+
     row_sums = C.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1.0
     return C / row_sums
@@ -245,6 +257,7 @@ def _implied_timescale_sweep(
     n_states: int,
     base_lag: int,
     n_frames: int,
+    reversible: bool = True,
 ) -> List[Dict[str, Any]]:
     """Compute implied timescales at multiple lag times for convergence check.
 
@@ -258,7 +271,7 @@ def _implied_timescale_sweep(
     for lag in lag_times:
         if lag >= n_frames - 1:
             continue
-        T_lag = _build_reversible_T(labels, n_states, lag)
+        T_lag = _build_transition_matrix(labels, n_states, lag, reversible=reversible)
         if T_lag is None:
             continue
         evals = np.sort(np.real(np.linalg.eigvals(T_lag)))[::-1]
@@ -278,6 +291,7 @@ def _chapman_kolmogorov_test(
     n_states: int,
     labels: np.ndarray,
     n_steps: int = 5,
+    reversible: bool = True,
 ) -> Dict[str, Any]:
     """Chapman-Kolmogorov self-consistency test.
 
@@ -298,7 +312,7 @@ def _chapman_kolmogorov_test(
         predicted.append([round(float(T_power[i, i]), 4) for i in range(n_states)])
 
         # Directly estimate T(k * tau) from trajectory data
-        T_direct = _build_reversible_T(labels, n_states, lag_time * k)
+        T_direct = _build_transition_matrix(labels, n_states, lag_time * k, reversible=reversible)
         if T_direct is not None:
             estimated.append([round(float(T_direct[i, i]), 4) for i in range(n_states)])
         else:
