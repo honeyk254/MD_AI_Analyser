@@ -16,6 +16,7 @@ Key fixes over original:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import traceback
 import time
@@ -35,6 +36,26 @@ from .models import AnalysisStatus, AnalysisResult
 logger = logging.getLogger("md_ai_analyzer")
 
 
+# ── JSON serialization helper ──────────────────────────────
+
+def _to_json_serializable(obj: Any) -> Any:
+    """Fallback encoder for types the standard JSON encoder can't handle."""
+    import numpy as np
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, AnalysisStatus):
+        return obj.value
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 class AnalysisOrchestrator:
     """Coordinate the full MD analysis pipeline for submitted jobs."""
 
@@ -42,6 +63,7 @@ class AnalysisOrchestrator:
         self.jobs: Dict[str, Dict[str, Any]] = {}
         self.progress_callbacks: Dict[str, List[Callable]] = {}
         self._tasks: Dict[str, asyncio.Task] = {}
+        self._load_jobs_from_disk()
 
     # ── Task management ────────────────────────────────────────
 
@@ -76,6 +98,89 @@ class AnalysisOrchestrator:
             self._tasks.pop(jid, None)
             logger.info("Cleaned up expired job: %s", jid)
         return len(expired)
+
+    # ── Disk persistence ───────────────────────────────────────
+
+    def _save_job_to_disk(self, job_id: str) -> None:
+        """Persist job metadata and full result to RESULTS_DIR/<job_id>/."""
+        job = self.jobs.get(job_id)
+        if not job:
+            return
+        job_dir = Path(job["job_dir"])
+        status = job["status"]
+        status_val = status.value if isinstance(status, AnalysisStatus) else status
+
+        meta: Dict[str, Any] = {
+            "job_id": job_id,
+            "status": status_val,
+            "created_at": job.get("created_at", 0.0),
+            "files": job.get("files", {}),
+            "job_dir": str(job_dir),
+            "trajectory_info": (
+                job["result"].trajectory_info if job.get("result") else {}
+            ),
+        }
+        try:
+            (job_dir / "meta.json").write_text(
+                json.dumps(meta, default=_to_json_serializable, indent=2)
+            )
+        except Exception as exc:
+            logger.warning("Failed to save meta.json for job %s: %s", job_id, exc)
+
+        result = job.get("result")
+        if result is not None:
+            try:
+                result_json = json.dumps(
+                    result.model_dump(), default=_to_json_serializable
+                )
+                (job_dir / "result.json").write_text(result_json)
+            except Exception as exc:
+                logger.warning("Failed to save result.json for job %s: %s", job_id, exc)
+
+    def _load_jobs_from_disk(self) -> None:
+        """Scan RESULTS_DIR and restore completed/failed jobs on startup."""
+        for job_dir in sorted(RESULTS_DIR.iterdir()):
+            if not job_dir.is_dir():
+                continue
+            meta_path = job_dir / "meta.json"
+            if not meta_path.exists():
+                continue
+            try:
+                meta = json.loads(meta_path.read_text())
+                job_id = meta["job_id"]
+                if job_id in self.jobs:
+                    continue
+
+                result: Optional[AnalysisResult] = None
+                result_path = job_dir / "result.json"
+                if result_path.exists():
+                    try:
+                        result = AnalysisResult.model_validate(
+                            json.loads(result_path.read_text())
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Could not restore result.json for %s: %s", job_id, exc
+                        )
+
+                try:
+                    status = AnalysisStatus(meta.get("status", "completed"))
+                except ValueError:
+                    status = AnalysisStatus.COMPLETED
+
+                self.jobs[job_id] = {
+                    "status": status,
+                    "files": meta.get("files", {}),
+                    "result": result,
+                    "progress": 100.0 if status == AnalysisStatus.COMPLETED else 0.0,
+                    "current_module": "done" if status == AnalysisStatus.COMPLETED else "failed",
+                    "message": "Loaded from disk",
+                    "job_dir": meta["job_dir"],
+                    "created_at": meta.get("created_at", 0.0),
+                }
+                logger.info("Restored job from disk: %s (status=%s)", job_id, status.value)
+            except Exception as exc:
+                logger.warning("Could not restore job from %s: %s", job_dir, exc)
 
     _bio_engine: Any = None
 
@@ -293,6 +398,7 @@ class AnalysisOrchestrator:
             result.status = AnalysisStatus.COMPLETED
             job["status"] = AnalysisStatus.COMPLETED
             job["result"] = result
+            self._save_job_to_disk(job_id)
             await self.emit_progress(job_id, "done", 100, "Analysis complete!")
 
         except Exception as exc:
@@ -300,6 +406,7 @@ class AnalysisOrchestrator:
             result.status = AnalysisStatus.FAILED
             job["status"] = AnalysisStatus.FAILED
             job["result"] = result
+            self._save_job_to_disk(job_id)
             await self.emit_progress(
                 job_id, "error", 0, f"Analysis failed: {exc}"
             )

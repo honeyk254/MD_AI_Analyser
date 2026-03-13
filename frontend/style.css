@@ -1581,3 +1581,92 @@ body::after {
     outline: 2px solid rgba(0, 212, 255, 0.4);
     outline-offset: 2px;
 }
+
+/* ===== History Section ===== */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.history-empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: 32px 0;
+    font-size: 0.9rem;
+}
+
+.history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    gap: 16px;
+}
+
+.history-item:hover {
+    border-color: var(--accent-orange);
+    background: rgba(251, 146, 60, 0.05);
+}
+
+.history-item-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.history-item-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.history-status {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    width: fit-content;
+}
+
+.history-status-ok  { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+.history-status-err { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+.history-status-run { background: rgba(0, 212, 255, 0.15); color: var(--accent-cyan); }
+
+.history-item-id {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.history-item-files {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+}
+
+.history-item-meta {
+    font-size: 0.8rem;
+    color: var(--accent-cyan);
+    font-weight: 500;
+}
+
+.history-item-date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}

@@ -359,6 +359,25 @@ async def get_results(job_id: str) -> JSONResponse | dict:
     return {"status": job["status"].value}
 
 
+@app.get("/api/jobs")
+async def list_jobs() -> JSONResponse:
+    """Return a summary list of all known jobs, newest first."""
+    summaries = []
+    for job_id, job in orchestrator.jobs.items():
+        status = job["status"]
+        summaries.append({
+            "job_id": job_id,
+            "status": status.value if isinstance(status, AnalysisStatus) else status,
+            "created_at": job.get("created_at", 0.0),
+            "trajectory_info": (
+                job["result"].trajectory_info if job.get("result") else {}
+            ),
+            "files": {k: Path(v).name for k, v in job.get("files", {}).items()},
+        })
+    summaries.sort(key=lambda x: x["created_at"], reverse=True)
+    return JSONResponse(content=sanitize_for_json(summaries))
+
+
 @app.get("/api/report/{job_id}")
 async def get_report(job_id: str) -> FileResponse:
     """Download the HTML analysis report."""

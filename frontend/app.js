@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initFileInputListeners();
     injectProgressGradient();
     await checkSystemInfo();
+    loadHistory();
 });
 
 // ===== Toast Notification System =====
@@ -289,6 +290,7 @@ function connectSSE(jobId) {
             showToast('Analysis complete!', 'success', 6000);
             addLog('Analysis complete!');
             fetchResults(jobId);
+            loadHistory();
         } else if (data.status === 'failed') {
             eventSource.close();
             showToast('Analysis failed: ' + data.message, 'error', 8000);
@@ -342,6 +344,56 @@ async function fetchResults(jobId) {
         console.error('Failed to fetch results:', e);
         showToast('Failed to fetch results', 'error');
     }
+}
+
+// ===== History =====
+async function loadHistory() {
+    try {
+        const resp = await fetch('/api/jobs');
+        const jobs = await resp.json();
+        renderHistory(jobs);
+    } catch (e) {
+        console.error('Failed to load history:', e);
+    }
+}
+
+function renderHistory(jobs) {
+    const list = document.getElementById('history-list');
+    if (!jobs || jobs.length === 0) {
+        list.innerHTML = '<div class="history-empty">No previous runs found.</div>';
+        return;
+    }
+    list.innerHTML = jobs.map(job => {
+        const date = job.created_at ? new Date(job.created_at * 1000).toLocaleString() : '—';
+        const info = job.trajectory_info || {};
+        const statusClass = job.status === 'completed' ? 'history-status-ok'
+            : job.status === 'failed' ? 'history-status-err' : 'history-status-run';
+        const fileNames = Object.values(job.files || {}).filter(Boolean);
+        const filesLabel = fileNames.length ? fileNames.join(', ') : '—';
+        const parts = [];
+        if (info.n_frames) parts.push(`${info.n_frames} frames`);
+        if (info.n_residues) parts.push(`${info.n_residues} residues`);
+        if (info.total_time_ns) parts.push(`${Number(info.total_time_ns).toFixed(1)} ns`);
+        const meta = parts.join(' · ');
+        return `<div class="history-item" onclick="loadHistoryJob('${job.job_id}')">
+            <div class="history-item-left">
+                <span class="history-status ${statusClass}">${job.status}</span>
+                <div class="history-item-id">Job ${job.job_id}</div>
+                <div class="history-item-files">${filesLabel}</div>
+            </div>
+            <div class="history-item-right">
+                ${meta ? `<div class="history-item-meta">${meta}</div>` : ''}
+                <div class="history-item-date">${date}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function loadHistoryJob(jobId) {
+    currentJobId = jobId;
+    showToast(`Loading run ${jobId}…`, 'info');
+    await fetchResults(jobId);
+    switchSection('results');
 }
 
 function renderResults() {
