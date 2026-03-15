@@ -217,13 +217,14 @@ async function uploadAndAnalyze() {
         // Start analysis
         const startFrameVal = document.getElementById('opt-start-frame')?.value;
         const endFrameVal = document.getElementById('opt-end-frame')?.value;
+        const strideVal = document.getElementById('opt-stride')?.value;
 
         const analyzeResp = await fetch('/api/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 job_id: currentJobId,
-                stride: 1,
+                stride: strideVal ? parseInt(strideVal) : 1,
                 run_gnn: document.getElementById('opt-gnn').checked,
                 run_transformer: document.getElementById('opt-transformer').checked,
                 run_msm: document.getElementById('opt-msm').checked,
@@ -436,9 +437,19 @@ function renderCaveats() {
     const notes = [];
     const bk = analysisResults.binding_kinetics || {};
     const ed = analysisResults.energy_decomposition || {};
+    const msm = analysisResults.msm || {};
+    const gnn = analysisResults.gnn_results || {};
+    const transformer = analysisResults.transformer_results || {};
+    const vae = analysisResults.vae || {};
+    const tunnels = analysisResults.tunnels || {};
 
     if (bk.kinetics_caveat) notes.push({ label: 'Binding Kinetics', text: bk.kinetics_caveat });
     if (ed.caveat) notes.push({ label: 'Interaction Scores', text: ed.caveat });
+    if (msm.caveat) notes.push({ label: 'MSM', text: msm.caveat });
+    if (gnn.caveat) notes.push({ label: 'GNN', text: gnn.caveat });
+    if (transformer.caveat) notes.push({ label: 'Transformer', text: transformer.caveat });
+    if (vae.caveat) notes.push({ label: 'VAE', text: vae.caveat });
+    if (tunnels.caveat) notes.push({ label: 'Cavities', text: tunnels.caveat });
 
     if (notes.length === 0) return;
 
@@ -477,25 +488,27 @@ function renderStats() {
     const clustering = analysisResults.clustering || {};
     const convergence = analysisResults.convergence || {};
     const bk = analysisResults.binding_kinetics || {};
-    const msm = analysisResults.msm_results || {};
-    const ck = msm.ck_test || {};
+    const msm = analysisResults.msm || {};
+    const ck = msm.chapman_kolmogorov || {};
+    const displayedTime = info.subset_applied ? info.analyzed_time_ns : info.total_time_ns;
+    const timeLabel = info.subset_applied ? 'Analyzed Time' : 'Sim Time';
 
-    const markovianVal = ck.is_markovian != null
-        ? (ck.is_markovian ? 'Yes' : 'No')
+    const markovianVal = msm.is_markovian != null
+        ? (msm.is_markovian ? 'Usable' : 'Exploratory')
         : 'N/A';
 
     const stats = [
         { value: info.n_frames || 'N/A', label: 'Frames' },
         { value: info.n_atoms || 'N/A', label: 'Atoms' },
         { value: info.n_residues || 'N/A', label: 'Residues' },
-        { value: info.total_time_ns ? `${info.total_time_ns.toFixed(1)} ns` : 'N/A', label: 'Sim Time' },
+        { value: displayedTime ? `${displayedTime.toFixed(1)} ns` : 'N/A', label: timeLabel },
         { value: rmsd.mean_rmsd ? `${rmsd.mean_rmsd.toFixed(2)} \u00c5` : 'N/A', label: 'Mean RMSD' },
         { value: rmsf.mean_rmsf ? `${rmsf.mean_rmsf.toFixed(2)} \u00c5` : 'N/A', label: 'Mean RMSF' },
         { value: rg.mean_rg ? `${rg.mean_rg.toFixed(1)} \u00c5` : 'N/A', label: 'Mean Rg' },
         { value: clustering.n_clusters || 'N/A', label: 'Clusters' },
         { value: convergence.convergence_score != null ? `${(convergence.convergence_score * 100).toFixed(0)}%` : 'N/A', label: 'Convergence' },
         { value: bk.total_contact_fraction != null ? `${(bk.total_contact_fraction * 100).toFixed(0)}%` : 'N/A', label: 'Contact Frac.' },
-        { value: markovianVal, label: 'Markovian' },
+        { value: markovianVal, label: 'MSM Quality' },
     ];
 
     const grid = document.getElementById('stats-grid');
@@ -525,12 +538,12 @@ const plotNameMap = {
     dccm_plot: 'DCCM', fel_plot: 'Free Energy', clustering_plot: 'Clusters',
     sasa_plot: 'SASA', dimensionality_plot: 'Dim. Reduction',
     dimensionality_3d_plot: '3D Projections',
-    gnn_plot: 'GNN', transformer_plot: 'Transformer', msm_plot: 'MSM',
+    gnn_plot: 'GNN Ranking', transformer_plot: 'Transformer', msm_plot: 'MSM',
     tica_plot: 'tICA', water_bridges_plot: 'Water Bridges', energy_plot: 'Interaction Scores',
     prs_plot: 'PRS', nma_plot: 'Normal Modes', entropy_plot: 'Entropy',
     ifp_plot: 'Interaction FP', tunnel_plot: 'Cavities/Voids',
     vae_plot: 'VAE Latent', dynamic_network_plot: 'Dynamic Network',
-    convergence_plot: 'Convergence', binding_kinetics_plot: 'Binding Kinetics',
+    convergence_plot: 'Convergence', binding_kinetics_plot: 'Binding Persistence',
     network_graph_plot: 'Allosteric Network', training_loss_plot: 'Training Losses',
 };
 
@@ -589,8 +602,8 @@ const insightTypeLabels = {
     hinge_residue: 'Hinge Residue', flexible_loop: 'Flexible Loop', stable_core: 'Stable Core',
     allosteric_pathway: 'Allosteric Pathway', communication_hub: 'Communication Hub',
     binding_pocket: 'Binding Pocket', conformational_states: 'Conformational States',
-    metastable_kinetics: 'Metastable Kinetics', domain_motion: 'Domain Motion',
-    stability_assessment: 'Stability Assessment', gnn_key_residues: 'GNN Key Residues',
+    metastable_kinetics: 'Exploratory MSM Kinetics', domain_motion: 'Domain Motion',
+    stability_assessment: 'Stability Assessment', gnn_key_residues: 'GNN Topological Outliers',
     transformer_transitions: 'Temporal Change-Points',
     water_bridge_sites: 'Water Bridge Sites', energy_hotspot: 'Interaction Hotspot',
     prs_effectors_sensors: 'PRS Effectors/Sensors', nma_collective_motion: 'NMA Collective Motion',
@@ -598,15 +611,15 @@ const insightTypeLabels = {
     dynamic_network_evolution: 'Dynamic Network', vae_conformational_landscape: 'VAE Landscape',
     interaction_fingerprint: 'Interaction Fingerprint',
     breathing_motion: 'Breathing Motion', cracking_event: 'Cracking / Local Unfolding',
-    cryptic_binding_site: 'Cryptic Binding Site', druggability_score: 'Druggability Score',
-    ptm_site_prediction: 'PTM Site Prediction', ppi_interface_hotspot: 'PPI Interface Hotspot',
+    cryptic_binding_site: 'Cryptic Binding Site', druggability_score: 'Druggability Heuristic',
+    ptm_site_prediction: 'PTM Accessibility Screen', ppi_interface_hotspot: 'PPI Interface Hotspot',
     interface_conformational_selection: 'Conformational Selection',
     protonation_dynamics: 'Protonation Dynamics', electrostatic_funnel: 'Electrostatic Funnel',
     aggregation_prone_region: 'Aggregation-Prone Region', folding_intermediate: 'Folding Intermediate',
     functional_motion_classification: 'Functional Motion Type', motion_function_coupling: 'Motion-Function Coupling',
     hbond_network_rewiring: 'H-Bond Network Rewiring', structural_waters: 'Structural Waters',
     local_stiffness_map: 'Local Stiffness Map', force_propagation_pathway: 'Force Propagation',
-    mutation_sensitivity: 'Mutation Sensitivity', stability_change_prediction: 'Stability Change (ddG)',
+    mutation_sensitivity: 'Mutation Risk Heuristic', stability_change_prediction: 'Stability Risk Heuristic',
 };
 
 let activeInsightFilter = 'all';
@@ -660,7 +673,13 @@ function renderInsights() {
         </div>`;
     }).join('');
 
-    wrapper.innerHTML = `<div class="insight-filters">${filterBar}</div><div class="insight-cards">${cards}</div>`;
+    wrapper.innerHTML = `
+        <div style="color:var(--text-muted);font-size:0.82rem;margin-bottom:12px;">
+            Insight scores are heuristic detector scores, not calibrated probabilities.
+        </div>
+        <div class="insight-filters">${filterBar}</div>
+        <div class="insight-cards">${cards}</div>
+    `;
 
     wrapper.querySelectorAll('.insight-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {

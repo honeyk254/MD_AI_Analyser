@@ -1,8 +1,8 @@
 # MD AI Analyzer
 
-**AI-Powered Molecular Dynamics Trajectory Analysis Platform**
+**AI-Assisted Molecular Dynamics Trajectory Analysis Platform**
 
-An advanced local platform that analyzes GROMACS MD simulation outputs using classical MD metrics, machine learning, graph neural networks, transformers, variational autoencoders, and biological inference -- then explains the biology behind the motions.
+An advanced local platform that analyzes GROMACS MD simulation outputs using classical MD metrics, machine learning, graph neural networks, transformers, variational autoencoders, and biological inference -- then proposes biology-oriented hypotheses with explicit methodological caveats.
 
 ---
 
@@ -24,12 +24,12 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
 - Interaction Score Decomposition (per-residue Cα-based proximity scores using LJ/Coulomb forms; coarse-grained heuristic ranking only, not physical energies)
 - Configurational Entropy (Schlitter's method upper bound with explicit kBT)
 - Convergence Assessment (block-average SEM ratio, autocorrelation, cosine content)
-- Binding Kinetics (residence time, kon/koff, contact survival; statistical caveats included)
+- Binding Contact Persistence (residence time, contact survival, conservative kon/koff reporting only when event counts are sufficient)
 - Trajectory Comparison (two-trajectory or half-split equilibration check)
 
 ### Machine Learning (10 modules)
 - Conformational State Discovery (HDBSCAN / GMM / KMeans)
-- Markov State Models (reversible transition matrix, MFPT, timescales, Chapman-Kolmogorov test with direct T(k·τ) estimation, `is_markovian` flag, implied timescale convergence)
+- Markov State Models (tICA/PCA-reduced states, reversible transition matrix, MFPT, implied timescales, Chapman-Kolmogorov test with direct T(k·τ) estimation, conservative `is_markovian` assessment)
 - Allosteric Pathway Detection (graph centrality, community detection)
 - Dynamic Domain Detection (spectral clustering on DCCM)
 - Ligand Interaction Analysis
@@ -55,7 +55,7 @@ An advanced local platform that analyzes GROMACS MD simulation outputs using cla
   - Latent density estimation
 
 ### AI Biological Inference Engine
-Automatically generates 38 types of biological interpretations via a data-driven detector dispatch with calibrated, reconstruction-quality-weighted confidence scores. All insights include explicit caveats about limitations and cross-validation requirements, including:
+Automatically generates 38 types of biological interpretations via a detector dispatch with detector-specific heuristic confidence scores. All insights include explicit caveats about limitations and cross-validation requirements, including:
 
 **Structural:**
 - Hinge residue detection
@@ -89,10 +89,10 @@ Automatically generates 38 types of biological interpretations via a data-driven
 **Stability & Prediction:**
 - Overall stability assessment
 - Convergence assessment
-- Mutation sensitivity prediction
-- Stability change prediction
+- Mutation sensitivity heuristic ranking
+- Stability risk heuristic
 - Aggregation-prone region detection
-- PTM site prediction
+- PTM accessibility screen
 
 **Deep Learning Insights:**
 - GNN key residue interpretation
@@ -166,6 +166,7 @@ Navigate to: **http://localhost:8000**
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | Start/End Frame | -- | Analyze a subtrajectory |
+| Stride | 1 | Analyze every Nth frame |
 | H-bond Cutoff | 3.5 A | Hydrogen bond distance threshold |
 | Contact Cutoff | 8.0 A | Contact map distance threshold |
 | Salt Bridge Cutoff | 4.0 A | Salt bridge distance threshold |
@@ -306,7 +307,7 @@ All fluctuation-based analyses (RMSF, DCCM, PCA, etc.) operate on Kabsch-aligned
 The orchestrator uses a local `params` dict per `run_analysis()` call rather than shared instance state, preventing race conditions when multiple jobs run concurrently.
 
 ### Trajectory I/O
-Trajectory coordinates are collected once via shared utility functions (`collect_ca_positions`, `collect_ca_coords_flat`) and reused across modules, avoiding redundant `O(n_frames)` iterations per analysis.
+Requested frame windows are materialised in memory before analysis so all downstream modules operate on the same selected subtrajectory. Shared utility functions (`collect_ca_positions`, `collect_ca_coords_flat`) then reuse those coordinates, avoiding redundant `O(n_frames)` iterations per analysis.
 
 ### Vectorised Computation
 Performance-critical code uses numpy vectorisation:
@@ -325,7 +326,7 @@ Both SASA (Shrake-Rupley) and DSSP (secondary structure) call `topology.create_s
 The VAE training schedule linearly ramps the KL weight β from 0 → 1 over the first 40% of epochs (Bowman et al. 2016 warmup), preventing posterior collapse and producing more expressive latent representations.
 
 ### Chapman-Kolmogorov Validation
-The MSM CK test now computes both predicted T(τ)^k and directly estimated T(k·τ) from trajectory data. A `max_deviation` metric (max absolute difference in self-transition probabilities) and `is_markovian` flag (threshold: 0.1) are returned alongside the visual comparison.
+The MSM CK test computes both predicted T(τ)^k and directly estimated T(k·τ) from trajectory data. Full-matrix and diagonal deviations are reported, and the `is_markovian` flag is only set when CK consistency and lag-time implied-timescale stability are both satisfactory.
 
 ### ML Reproducibility
 All ML and deep learning modules call `set_global_seed(42)` before model initialisation, ensuring deterministic results across runs (given the same input).

@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class AnalysisStatus(str, Enum):
@@ -133,6 +133,23 @@ class AnalysisRequest(BaseModel):
         if v < 1:
             raise ValueError("msm_lag_time must be >= 1")
         return v
+
+    @field_validator("start_frame", "end_frame")
+    @classmethod
+    def frames_non_negative(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
+            raise ValueError("frame indices must be >= 0")
+        return v
+
+    @model_validator(mode="after")
+    def validate_frame_window(self) -> "AnalysisRequest":
+        if (
+            self.start_frame is not None
+            and self.end_frame is not None
+            and self.end_frame <= self.start_frame
+        ):
+            raise ValueError("end_frame must be greater than start_frame")
+        return self
 
 
 class ProgressUpdate(BaseModel):

@@ -345,6 +345,10 @@ def run_gnn_analysis(universe: Any, **kwargs: Any) -> dict[str, Any]:
             "model_type": "GAT+GCN hybrid",
             "training_losses": training_losses,
             "reconstruction_error": round(recon_error, 6),
+            "caveat": (
+                "Residue scores are single-trajectory self-supervised graph-topology "
+                "rankings trained against RMSF, not validated functional-importance predictions."
+            ),
         }
 
     except ImportError as e:

@@ -1,7 +1,8 @@
-"""Binding Kinetics Analysis.
+"""Binding kinetics proxy analysis.
 
-Computes residence time, kon/koff estimates, and contact-survival
-functions for ligand--protein interactions from an MD trajectory.
+Computes residence times, contact-survival functions, and conservative
+contact-based on/off-rate proxies for ligand--protein interactions from
+an MD trajectory.
 """
 from __future__ import annotations
 
@@ -21,13 +22,13 @@ def compute_binding_kinetics(
     contact_cutoff: float = 4.5,
     **kwargs: Any,
 ) -> Dict[str, Any]:
-    """Analyse ligand binding kinetics from an MD trajectory.
+    """Analyse ligand binding persistence from an MD trajectory.
 
     Metrics computed:
 
     * Per-residue contact survival function.
     * Ligand residence time (continuous and intermittent).
-    * Estimated kon/koff from contact/dissociation events.
+    * Conservative contact-based on/off-rate proxies from event counts.
     * Centre-of-mass distance over time.
 
     Parameters
@@ -60,9 +61,15 @@ def compute_binding_kinetics(
         ``time``
             List of timestamps (ps).
         ``koff_estimate_per_ps``
-            Estimated off-rate (1/ps).
+            Off-rate estimate (1/ps), only reported when enough events
+            are observed for a minimally reliable estimate.
         ``kon_estimate_per_ps``
-            Estimated on-rate (1/ps).
+            On-rate estimate (1/ps), only reported when enough events
+            are observed for a minimally reliable estimate.
+        ``contact_off_rate_proxy_per_ps``
+            Raw contact-loss event rate proxy (1/ps).
+        ``contact_on_rate_proxy_per_ps``
+            Raw contact-formation event rate proxy (1/ps).
         ``n_bind_events``
             Number of binding events detected.
         ``n_unbind_events``
@@ -164,12 +171,29 @@ def compute_binding_kinetics(
         total_contact_time: float = float(np.sum(any_contact)) * dt
         total_unbound_time: float = float(np.sum(~any_contact)) * dt
 
-        koff: float = (
+        koff_proxy: float = (
             n_unbind / max(total_contact_time, dt) if total_contact_time > 0 else 0.0
         )
-        kon: float = (
+        kon_proxy: float = (
             n_bind / max(total_unbound_time, dt) if total_unbound_time > 0 else 0.0
         )
+        min_events_for_reliable_rates = 10
+        reliable_rates: bool = (
+            n_bind >= min_events_for_reliable_rates
+            and n_unbind >= min_events_for_reliable_rates
+        )
+        if reliable_rates:
+            kon_estimate: float | None = kon_proxy
+            koff_estimate: float | None = koff_proxy
+            rate_quality = "event-supported"
+        elif n_bind >= 3 and n_unbind >= 3:
+            kon_estimate = None
+            koff_estimate = None
+            rate_quality = "sparse-events"
+        else:
+            kon_estimate = None
+            koff_estimate = None
+            rate_quality = "insufficient-events"
 
         # ── Per-residue contact time ─────────────────────────────
         contact_frames_per_res: np.ndarray = per_res_contact.sum(axis=0)
@@ -193,12 +217,13 @@ def compute_binding_kinetics(
 
         logger.info(
             "Binding kinetics complete: %d bind events, %d unbind events, "
-            "contact fraction=%.4f, koff=%.2e, kon=%.2e",
+            "contact fraction=%.4f, koff_proxy=%.2e, kon_proxy=%.2e, reliable=%s",
             n_bind,
             n_unbind,
             float(np.mean(any_contact)),
-            koff,
-            kon,
+            koff_proxy,
+            kon_proxy,
+            reliable_rates,
         )
 
         return {
@@ -217,17 +242,29 @@ def compute_binding_kinetics(
             "per_residue_contact_time": per_res_time[:50],
             "com_distance": [round(float(d), 2) for d in com_distances],
             "time": times.tolist(),
-            "koff_estimate_per_ps": round(float(koff), 8),
-            "kon_estimate_per_ps": round(float(kon), 8),
+            "koff_estimate_per_ps": (
+                round(float(koff_estimate), 8) if koff_estimate is not None else None
+            ),
+            "kon_estimate_per_ps": (
+                round(float(kon_estimate), 8) if kon_estimate is not None else None
+            ),
+            "contact_off_rate_proxy_per_ps": round(float(koff_proxy), 8),
+            "contact_on_rate_proxy_per_ps": round(float(kon_proxy), 8),
+            "rate_estimates_reliable": reliable_rates,
+            "rate_estimation_quality": rate_quality,
+            "minimum_events_for_reliable_rate_estimate": (
+                min_events_for_reliable_rates
+            ),
             "n_bind_events": n_bind,
             "n_unbind_events": n_unbind,
             "total_contact_fraction": round(float(np.mean(any_contact)), 4),
             "kinetics_caveat": (
-                "kon/koff estimates are counting-based approximations and "
-                "require many binding/unbinding events for statistical "
-                "reliability. Typical MD simulations (ns-us) may be too "
-                "short for converged kinetics. Interpret rate estimates "
-                "with caution unless >= 10 events of each type are observed."
+                "Rates here are contact-based event-count approximations, not "
+                "rigorous kinetic constants. Reliable kon/koff reporting "
+                f"requires at least {min_events_for_reliable_rates} bind and "
+                f"{min_events_for_reliable_rates} unbind events; otherwise only "
+                "raw contact on/off-rate proxies are reported. Typical MD "
+                "simulations may be too short for converged kinetics."
             ),
         }
 

@@ -220,6 +220,10 @@ def run_vae_analysis(
             "reconstruction_error": round(overall_recon_error, 6),
             "per_frame_recon_error": [round(float(x), 4) for x in per_frame_mse],
             "latent_variance": [round(float(v), 4) for v in latent_variance],
+            "caveat": (
+                "The latent space is an unsupervised low-dimensional representation for "
+                "exploration, not a validated mechanistic or kinetic model."
+            ),
         }
 
     except Exception as e:

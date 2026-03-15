@@ -176,6 +176,10 @@ def detect_tunnels(
             "alpha_spheres": _delaunay_voids(
                 ca, mean_ca_pos, probe_radius, vdw_radius
             ),
+            "caveat": (
+                "This module estimates static cavity/void volumes and lining residues. "
+                "It does not trace connected tunnels or transport pathways."
+            ),
         }
 
     except Exception as e:

@@ -241,7 +241,7 @@
                                 </svg>
                                 <span>Frame Range</span>
                             </div>
-                            <div class="param-grid cols-2">
+                            <div class="param-grid cols-3">
                                 <div class="param-card">
                                     <div class="param-label">Start Frame</div>
                                     <input type="number" id="opt-start-frame" placeholder="0" min="0">
@@ -251,6 +251,11 @@
                                     <div class="param-label">End Frame</div>
                                     <input type="number" id="opt-end-frame" placeholder="All">
                                     <div class="param-hint">Last frame (blank = all)</div>
+                                </div>
+                                <div class="param-card">
+                                    <div class="param-label">Stride</div>
+                                    <input type="number" id="opt-stride" value="1" min="1">
+                                    <div class="param-hint">Analyze every Nth frame</div>
                                 </div>
                             </div>
                         </div>

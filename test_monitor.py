@@ -24,13 +24,13 @@ for i in range(120):
             print(f"  Residues: {ti.get('n_residues')}")
         rmsd = data.get("rmsd")
         if rmsd:
-            print(f"RMSD: mean={rmsd.get('mean_rmsd','?')} nm, max={rmsd.get('max_rmsd','?')} nm")
+            print(f"RMSD: mean={rmsd.get('mean_rmsd','?')} Å, max={rmsd.get('max_rmsd','?')} Å")
         rmsf = data.get("rmsf")
         if rmsf:
-            print(f"RMSF: mean={rmsf.get('mean_rmsf','?')} nm")
+            print(f"RMSF: mean={rmsf.get('mean_rmsf','?')} Å")
         rg = data.get("rg")
         if rg:
-            print(f"Rg: mean={rg.get('mean_rg','?')} nm")
+            print(f"Rg: mean={rg.get('mean_rg','?')} Å")
         hb = data.get("hbonds")
         if hb:
             print(f"HBonds: mean={hb.get('mean_hbonds','?')}")

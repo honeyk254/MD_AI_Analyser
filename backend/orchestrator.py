@@ -263,6 +263,51 @@ class AnalysisOrchestrator:
         cbs = self.progress_callbacks.get(job_id, [])
         self.progress_callbacks[job_id] = [cb for cb in cbs if cb != callback]
 
+    @staticmethod
+    def _slice_universe(
+        universe: mda.Universe,
+        start: int,
+        stop: Optional[int] = None,
+        step: int = 1,
+    ) -> mda.Universe:
+        """Materialise a frame window so downstream modules see only that slice."""
+        n_frames = len(universe.trajectory)
+        safe_start = max(0, min(start, max(n_frames - 1, 0)))
+        safe_stop = n_frames if stop is None else max(safe_start + 1, min(stop, n_frames))
+        safe_step = max(1, step)
+
+        if hasattr(universe, "transfer_to_memory"):
+            universe.transfer_to_memory(
+                start=safe_start, stop=safe_stop, step=safe_step
+            )
+            return universe
+
+        # Fallback for older MDAnalysis versions without transfer_to_memory().
+        from MDAnalysis.coordinates.memory import MemoryReader
+
+        coords: list[np.ndarray] = []
+        dims: list[np.ndarray] = []
+        times: list[float] = []
+        for ts in universe.trajectory[safe_start:safe_stop:safe_step]:
+            coords.append(universe.atoms.positions.copy())
+            dims.append(np.array(ts.dimensions, dtype=np.float32))
+            times.append(float(getattr(ts, "time", 0.0)))
+
+        if not coords:
+            raise ValueError("Requested trajectory slice produced zero frames")
+
+        subset = universe.copy()
+        dt = float(times[1] - times[0]) if len(times) > 1 else float(
+            getattr(universe.trajectory, "dt", 0.0)
+        )
+        subset.load_new(
+            np.asarray(coords, dtype=np.float32),
+            format=MemoryReader,
+            dimensions=np.asarray(dims, dtype=np.float32),
+            dt=dt,
+        )
+        return subset
+
     # ── Main pipeline ──────────────────────────────────────────
 
     async def run_analysis(
@@ -319,49 +364,74 @@ class AnalysisOrchestrator:
             n_frames = len(universe.trajectory)
             n_atoms = universe.atoms.n_atoms
             n_residues = universe.residues.n_residues
+            original_dt = float(getattr(universe.trajectory, "dt", 0.0))
+            stride = max(1, stride)
 
             # Compute effective frame range
             actual_start = max(0, min(start_frame or 0, n_frames - 1))
             actual_end = max(actual_start + 1, min(end_frame or n_frames, n_frames))
+            frame_indices = list(range(actual_start, actual_end, stride))
+            if not frame_indices:
+                raise ValueError("Requested frame window produced zero frames")
+
+            universe = self._slice_universe(
+                universe, start=actual_start, stop=actual_end, step=stride
+            )
+            analysis_dt = float(getattr(universe.trajectory, "dt", original_dt))
 
             result.trajectory_info = {
                 "n_frames": n_frames,
                 "n_atoms": n_atoms,
                 "n_residues": n_residues,
-                "timestep_ps": getattr(universe.trajectory, "dt", 0),
-                "total_time_ns": n_frames * getattr(universe.trajectory, "dt", 0) / 1000,
-                "analyzed_frames": f"{actual_start}-{actual_end}",
+                "timestep_ps": analysis_dt,
+                "original_timestep_ps": original_dt,
+                "total_time_ns": n_frames * original_dt / 1000,
+                "analyzed_time_ns": len(frame_indices) * analysis_dt / 1000,
+                "analyzed_frames": f"{actual_start}:{actual_end}:{stride}",
+                "frames_analyzed_count": len(frame_indices),
+                "analysis_stride": stride,
+                "subset_applied": (
+                    actual_start > 0 or actual_end < n_frames or stride > 1
+                ),
             }
-
-            # NOTE: MDAnalysis trajectory slicing with universe.trajectory[a:b]
-            # does NOT persist the slice.  For sub-trajectory support we would
-            # need to wrap with FrameIteratorSliced or pass start/end to each
-            # module.  For now we log a warning if the user requested a subset.
-            if start_frame is not None or end_frame is not None:
-                logger.info(
-                    "Sub-trajectory requested: frames %d–%d of %d",
-                    actual_start, actual_end, n_frames,
-                )
+            logger.info(
+                "Trajectory window materialised: start=%d stop=%d step=%d (%d frames)",
+                actual_start,
+                actual_end,
+                stride,
+                len(frame_indices),
+            )
 
             # ── Optionally discard equilibration ────────────────
-            if discard_equilibration and n_frames > 50:
+            if discard_equilibration and len(universe.trajectory) > 50:
                 try:
                     from .analysis.rmsd import compute_rmsd
                     rmsd_result = await asyncio.to_thread(
                         compute_rmsd, universe=universe,
                     )
-                    equil_frame = rmsd_result.get("equilibration_frame", 0)
-                    if equil_frame > 0 and equil_frame < n_frames * 0.5:
+                    equil_frame = int(rmsd_result.get("equilibration_frame", 0))
+                    current_frames = len(universe.trajectory)
+                    if 0 < equil_frame < current_frames * 0.5:
                         logger.info(
                             "Discarding first %d frames as equilibration "
                             "(discard_equilibration=True)",
                             equil_frame,
                         )
-                        # Create a sliced trajectory view to skip equilibration
-                        universe.trajectory[equil_frame:]
+                        universe = self._slice_universe(
+                            universe, start=equil_frame, stop=current_frames, step=1
+                        )
+                        actual_start += equil_frame * stride
                         result.trajectory_info["equilibration_discarded"] = equil_frame
                         result.trajectory_info["analyzed_frames"] = (
-                            f"{equil_frame}-{n_frames}"
+                            f"{actual_start}:{actual_end}:{stride}"
+                        )
+                        result.trajectory_info["frames_analyzed_count"] = len(
+                            universe.trajectory
+                        )
+                        result.trajectory_info["analyzed_time_ns"] = (
+                            len(universe.trajectory)
+                            * float(getattr(universe.trajectory, "dt", analysis_dt))
+                            / 1000
                         )
                 except Exception as exc:
                     logger.warning(

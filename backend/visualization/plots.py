@@ -584,7 +584,7 @@ def _plot_gnn(data: dict[str, Any]) -> Optional[go.Figure]:
         marker_color=ACCENT_ORANGE, name="GNN Importance",
     ))
     return apply_dark_theme(
-        fig, "GNN Residue Importance Scores", "Residue ID", "Importance",
+        fig, "GNN Topological Importance Scores", "Residue ID", "Score",
     )
 
 
@@ -622,7 +622,7 @@ def _plot_transformer(data: dict[str, Any]) -> Optional[go.Figure]:
             marker=dict(color=ACCENT_RED, size=10, symbol="diamond"),
         ))
     return apply_dark_theme(
-        fig, "Transformer: Temporal Importance & Transitions",
+        fig, "Transformer: Temporal Change-Points",
         "Frame", "Importance",
     )
 
@@ -648,8 +648,9 @@ def _plot_msm(data: dict[str, Any]) -> Optional[go.Figure]:
         z=T, colorscale="Blues",
         colorbar=dict(title="Probability"),
     ))
+    quality = "usable" if data.get("is_markovian") else "exploratory"
     return apply_dark_theme(
-        fig, "MSM Transition Probability Matrix", "To State", "From State",
+        fig, f"MSM Transition Probability Matrix ({quality})", "To State", "From State",
     )
 
 
@@ -1198,14 +1199,20 @@ def _plot_binding_kinetics(data: dict[str, Any]) -> Optional[go.Figure]:
     if not data:
         return None
 
+    kon_display = data.get("kon_estimate_per_ps")
+    koff_display = data.get("koff_estimate_per_ps")
+    if kon_display is None:
+        kon_display = data.get("contact_on_rate_proxy_per_ps", 0)
+    if koff_display is None:
+        koff_display = data.get("contact_off_rate_proxy_per_ps", 0)
+
     fig = make_subplots(
         rows=2, cols=2,
         subplot_titles=(
             "COM Distance Over Time",
             "Contact Survival Function",
             "Per-Residue Contact Occupancy",
-            f"kon={data.get('kon_estimate_per_ps', 0):.2e}/ps  "
-            f"koff={data.get('koff_estimate_per_ps', 0):.2e}/ps",
+            f"kon proxy={kon_display:.2e}/ps  koff proxy={koff_display:.2e}/ps",
         ),
     )
 
@@ -1254,7 +1261,15 @@ def _plot_binding_kinetics(data: dict[str, Any]) -> Optional[go.Figure]:
             marker=dict(color=ACCENT_RED, size=8, symbol="triangle-down"),
         ), row=2, col=2)
 
-    return apply_dark_theme(fig, "Binding Kinetics Analysis", height=600)
+    if not data.get("rate_estimates_reliable", False):
+        fig.add_annotation(
+            text="Sparse events: showing contact-rate proxies, not reliable kon/koff",
+            xref="paper", yref="paper", x=0.99, y=0.01,
+            showarrow=False, xanchor="right", yanchor="bottom",
+            font=dict(size=11, color=TEXT_COLOR),
+        )
+
+    return apply_dark_theme(fig, "Binding Contact Persistence Analysis", height=600)
 
 
 @safe_plot

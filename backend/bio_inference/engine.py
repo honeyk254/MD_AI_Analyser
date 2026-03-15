@@ -9,7 +9,7 @@ insight dicts with schema::
         "type": str,
         "residues": list[int],
         "description": str,
-        "confidence": float,
+        "confidence": float,  # heuristic, detector-specific score
         "evidence": list[str],
         "category": str,   # structural | dynamic | allosteric | binding | transition
     }
@@ -90,7 +90,7 @@ class BiologicalInferenceEngine:
         Returns
         -------
         list[dict]
-            Insight dicts sorted by descending confidence.
+            Insight dicts sorted by descending heuristic confidence.
         """
         insights: List[Dict[str, Any]] = []
 
@@ -102,6 +102,13 @@ class BiologicalInferenceEngine:
             try:
                 new_insights = method(result)
                 if new_insights:
+                    for insight in new_insights:
+                        insight.setdefault("confidence_method", "heuristic")
+                        insight.setdefault(
+                            "confidence_note",
+                            "Heuristic confidence derived from detector-specific rules; "
+                            "not statistically calibrated.",
+                        )
                     insights.extend(new_insights)
             except Exception:
                 logger.debug(
@@ -347,6 +354,7 @@ class BiologicalInferenceEngine:
 
             if meta_states and timescales:
                 most_stable = meta_states[0]
+                is_markovian = bool(msm_data.get("is_markovian", False))
                 insights.append({
                     "type": "metastable_kinetics",
                     "residues": [],
@@ -355,8 +363,9 @@ class BiologicalInferenceEngine:
                                   f"{most_stable['self_transition']:.2f}) has population "
                                   f"{most_stable['population']*100:.1f}%. "
                                   f"Slowest implied timescale: {timescales[0]:.1f} frames, "
-                                  f"indicating the dominant relaxation process.",
-                    "confidence": 0.75,
+                                  f"indicating the dominant relaxation process. "
+                                  f"{'CK consistency and lag-time stability support an exploratory kinetic interpretation.' if is_markovian else 'CK consistency and/or lag-time stability are insufficient for a strong kinetic claim, so treat this as exploratory only.'}",
+                    "confidence": 0.55 if is_markovian else 0.3,
                     "evidence": [
                         f"State {s['state']}: P_self={s['self_transition']:.2f}, pop={s['population']*100:.1f}%"
                         for s in meta_states[:5]
@@ -460,17 +469,17 @@ class BiologicalInferenceEngine:
                 resids = [r["resid"] for r in top]
                 recon_err = gnn.get("reconstruction_error", 1.0)
                 # Confidence scaled by reconstruction quality
-                conf = round(min(0.65, 0.35 + 0.3 * max(0.0, 1.0 - recon_err)), 2)
+                conf = round(min(0.5, 0.25 + 0.25 * max(0.0, 1.0 - recon_err)), 2)
                 insights.append({
                     "type": "gnn_key_residues",
                     "residues": resids,
-                    "description": f"Graph Neural Network analysis identifies residues "
+                    "description": f"Graph Neural Network analysis highlights residues "
                                   f"{', '.join(map(str, resids[:5]))} as having distinctive "
-                                  f"graph-topological properties (high learned importance scores). "
+                                  f"graph-topological properties (high learned scores). "
                                   f"These residues have unusual combinations of connectivity, "
-                                  f"fluctuation, and network position. Note: GNN importance "
-                                  f"reflects graph-structural distinctiveness, not experimentally "
-                                  f"validated functional importance. Cross-reference with "
+                                  f"fluctuation, and network position. Note: this is a single-trajectory "
+                                  f"self-supervised ranking, not an experimentally validated predictor of "
+                                  f"functional importance. Cross-reference with "
                                   f"mutagenesis data or conservation scores before drawing "
                                   f"functional conclusions.",
                     "confidence": conf,
@@ -493,7 +502,7 @@ class BiologicalInferenceEngine:
             if transitions:
                 recon_err = trans.get("reconstruction_error", 1.0)
                 # Confidence scaled by reconstruction quality
-                conf = round(min(0.55, 0.30 + 0.25 * max(0.0, 1.0 - recon_err)), 2)
+                conf = round(min(0.45, 0.20 + 0.2 * max(0.0, 1.0 - recon_err)), 2)
                 insights.append({
                     "type": "transformer_transitions",
                     "residues": [],
@@ -503,7 +512,8 @@ class BiologicalInferenceEngine:
                                   f"These change-points indicate abrupt shifts in the learned "
                                   f"representation and may correspond to conformational rearrangements. "
                                   f"Note: the model functions as a nonlinear change-point detector "
-                                  f"and results should be cross-referenced with RMSD/clustering data.",
+                                  f"on a single trajectory and should be cross-referenced with RMSD, clustering, "
+                                  f"or other structural metrics.",
                     "confidence": conf,
                     "evidence": [
                         f"Frame {t['frame']}: change-point magnitude={t['magnitude']:.3f}"
@@ -551,19 +561,26 @@ class BiologicalInferenceEngine:
             top_pairs = ed.get("top_pairs", [])
             if top_pairs:
                 strong = top_pairs[:5]
-                pair_strs = [f"{p['resid_i']}-{p['resid_j']} ({p['energy_kj']:.1f} kJ/mol)" for p in strong]
+                pair_strs = [
+                    f"{p['resid_i']}-{p['resid_j']} (score={p['interaction_score']:.1f})"
+                    for p in strong
+                ]
                 resids = []
                 for p in strong:
                     resids.extend([p["resid_i"], p["resid_j"]])
                 insights.append({
                     "type": "energy_hotspot",
                     "residues": list(set(resids)),
-                    "description": f"Energy decomposition identifies key interaction hotspots: "
+                    "description": f"Interaction-score decomposition identifies key hotspots: "
                                   f"{', '.join(pair_strs)}. These residue pairs contribute most "
-                                  f"to the protein's non-bonded energy, making them potential targets "
-                                  f"for stability engineering or drug design.",
-                    "confidence": 0.7,
-                    "evidence": [f"Pair {p['resid_i']}-{p['resid_j']}: {p['energy_kj']:.1f} kJ/mol" for p in strong],
+                                  f"to the coarse-grained non-bonded interaction score, making them potential "
+                                  f"targets for follow-up inspection. This ranking is qualitative because the "
+                                  f"underlying score is a C-alpha proximity heuristic, not a physical energy.",
+                    "confidence": 0.45,
+                    "evidence": [
+                        f"Pair {p['resid_i']}-{p['resid_j']}: interaction score={p['interaction_score']:.1f}"
+                        for p in strong
+                    ],
                     "category": "structural",
                 })
         return insights
@@ -979,7 +996,7 @@ class BiologicalInferenceEngine:
             return insights
 
         bottleneck = tunnel_data.get("bottleneck_residues", [])
-        cavity_volumes = tunnel_data.get("cavity_volumes", [])
+        cavity_volumes = tunnel_data.get("cavity_volume_per_frame", [])
 
         if not bottleneck:
             return insights
@@ -1047,7 +1064,7 @@ class BiologicalInferenceEngine:
             return insights
 
         bottleneck = tunnel_data.get("bottleneck_residues", [])
-        cavity_volumes = tunnel_data.get("cavity_volumes", [])
+        cavity_volumes = tunnel_data.get("cavity_volume_per_frame", [])
 
         if not bottleneck or not cavity_volumes:
             return insights
@@ -1090,23 +1107,29 @@ class BiologicalInferenceEngine:
                     evidence.append(f"{hydro_frac*100:.0f}% of cavity-lining residues are hydrophobic")
 
         # Energy: strong interactions at pocket residues
-        if isinstance(energy_data, dict) and "per_residue_energy" in energy_data:
-            per_res_e = energy_data["per_residue_energy"]
+        if isinstance(energy_data, dict) and "total_interaction_score" in energy_data:
+            per_res_e = dict(zip(
+                energy_data.get("resids", []),
+                energy_data.get("total_interaction_score", []),
+            ))
             pocket_energy = 0.0
             counted = 0
             for rid in bn_resids:
-                rid_str = str(rid)
-                if rid_str in per_res_e:
-                    pocket_energy += abs(per_res_e[rid_str])
+                if rid in per_res_e:
+                    pocket_energy += abs(per_res_e[rid])
                     counted += 1
             if counted > 0:
                 avg_pocket_e = pocket_energy / counted
                 if avg_pocket_e > 50:
                     score += 0.2
-                    evidence.append(f"Average pocket residue interaction energy: {avg_pocket_e:.1f} kJ/mol (strong)")
+                    evidence.append(
+                        f"Average pocket residue interaction score: {avg_pocket_e:.1f} (strong)"
+                    )
                 else:
                     score += 0.05
-                    evidence.append(f"Average pocket residue interaction energy: {avg_pocket_e:.1f} kJ/mol")
+                    evidence.append(
+                        f"Average pocket residue interaction score: {avg_pocket_e:.1f}"
+                    )
 
         # Volume stability (enclosure)
         vol_cv = np.std(cavity_volumes) / (mean_vol + 1e-8)
@@ -1121,15 +1144,15 @@ class BiologicalInferenceEngine:
         insights.append({
             "type": "druggability_score",
             "residues": bn_resids,
-            "description": f"Druggability assessment: the primary detected cavity is {drug_label} "
+            "description": f"Druggability heuristic screen: the primary detected cavity is {drug_label} "
                           f"(score={score:.2f}/1.0). "
                           f"Assessment considers pocket volume ({mean_vol:.0f} A^3), "
-                          f"hydrophobic character, interaction energy, and volume stability. "
+                          f"hydrophobic character, interaction-score enrichment, and volume stability. "
                           f"{'This pocket is a strong candidate for structure-based drug design.' if score > 0.6 else 'Consider experimental validation (e.g., fragment screening) to confirm binding potential.'} "
                           f"CAVEAT: This is a heuristic proxy-based score, not a validated druggability "
                           f"predictor. Use FPocket, SiteMap, or experimental fragment screens for "
                           f"quantitative druggability assessment.",
-            "confidence": round(min(0.85, 0.5 + score * 0.4), 2),
+            "confidence": round(min(0.55, 0.25 + score * 0.3), 2),
             "evidence": evidence,
             "category": "binding",
         })
@@ -1231,7 +1254,7 @@ class BiologicalInferenceEngine:
                 "type": "ptm_site_prediction",
                 "residues": resid_list,
                 "description": f"Identified {len(ptm_candidates)} potential post-translational modification "
-                              f"sites accessible during MD simulation (top {len(top)} shown). "
+                              f"accessibility candidates during MD simulation (top {len(top)} shown). "
                               f"Types: {type_desc}. These residues are surface-exposed, dynamically "
                               f"flexible, and in loop/coil regions — structural prerequisites for "
                               f"enzymatic PTM. "
@@ -1239,7 +1262,7 @@ class BiologicalInferenceEngine:
                               f"requires kinase/transferase recognition motifs (sequence context) which "
                               f"are not evaluated here. Use tools like NetPhos, GPS, or kinase-specific "
                               f"predictors for sequence-based PTM prediction.",
-                "confidence": round(min(0.65, 0.4 + 0.03 * len(ptm_candidates)), 2),
+                "confidence": round(min(0.45, 0.2 + 0.02 * len(ptm_candidates)), 2),
                 "evidence": evidence,
                 "category": "structural",
             })
@@ -2322,8 +2345,8 @@ class BiologicalInferenceEngine:
         insights.append({
             "type": "mutation_sensitivity",
             "residues": resid_list,
-            "description": f"Mutation sensitivity prediction identifies {len(resid_list)} residues "
-                          f"most likely to cause functional disruption if mutated. "
+            "description": f"Mutation-risk heuristic identifies {len(resid_list)} residues "
+                          f"most likely to be structurally or functionally sensitive if mutated. "
                           f"Top candidates: {', '.join(map(str, resid_list[:5]))}. "
                           f"These residues score highly across multiple metrics: structural "
                           f"centrality (GNN), allosteric importance (network hubs), hydrogen bond "
@@ -2331,7 +2354,7 @@ class BiologicalInferenceEngine:
                           f"CAVEAT: This is a proxy-based ranking, not a quantitative ddG prediction. "
                           f"For experimental validation, use deep mutational scanning; for computational "
                           f"ddG estimates, use FoldX, Rosetta ddG, or free energy perturbation (FEP).",
-            "confidence": round(min(0.85, 0.55 + 0.03 * len([r for r, s in top if len(s["sources"]) >= 2])), 2),
+            "confidence": round(min(0.45, 0.2 + 0.02 * len([r for r, s in top if len(s["sources"]) >= 2])), 2),
             "evidence": evidence,
             "category": "structural",
         })
@@ -2349,7 +2372,10 @@ class BiologicalInferenceEngine:
         if not isinstance(energy_data, dict) or energy_data.get("error"):
             return insights
 
-        per_res_energy = energy_data.get("per_residue_energy", {})
+        per_res_energy = dict(zip(
+            energy_data.get("resids", []),
+            energy_data.get("total_interaction_score", []),
+        ))
         if not per_res_energy:
             return insights
 
@@ -2387,8 +2413,7 @@ class BiologicalInferenceEngine:
         max_abs_e = max((abs(e) for e in per_res_energy.values()), default=1)
 
         destab_candidates = []
-        for rid_str, energy in per_res_energy.items():
-            rid = int(rid_str)
+        for rid, energy in per_res_energy.items():
             rn = resnames.get(rid, "")[:3].upper()
             f_val = rmsf_lookup.get(rid, 0)
 
@@ -2448,16 +2473,16 @@ class BiologicalInferenceEngine:
         insights.append({
             "type": "stability_change_prediction",
             "residues": resid_list,
-            "description": f"Stability change prediction identifies {len(destab_candidates)} residues "
-                          f"where mutations are most likely to destabilize the protein (ddG > 0). "
+            "description": f"Stability-risk heuristic identifies {len(destab_candidates)} residues "
+                          f"where mutations are most likely to destabilize the protein. "
                           f"Highest-risk positions: {', '.join(c['resname'] + str(c['resid']) for c in top[:5])}. "
                           f"These residues are deeply buried, form extensive contacts and hydrogen "
-                          f"bonds, and contribute significantly to the total interaction energy.{desc_extra} "
+                          f"bonds, and contribute strongly to the interaction-score heuristic.{desc_extra} "
                           f"CAVEAT: The 'ddG-proxy' score is a heuristic, not a thermodynamic free "
                           f"energy. Use FoldX, Rosetta, or alchemical free energy perturbation for "
                           f"quantitative stability predictions. Force field accuracy also limits "
                           f"per-residue energy decomposition reliability.",
-            "confidence": round(min(0.8, 0.5 + 0.05 * len([c for c in top if c["score"] > 0.5])), 2),
+            "confidence": round(min(0.45, 0.2 + 0.03 * len([c for c in top if c["score"] > 0.5])), 2),
             "evidence": evidence,
             "category": "structural",
         })

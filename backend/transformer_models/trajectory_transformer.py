@@ -343,6 +343,10 @@ def run_transformer_analysis(
             "training_losses": training_losses,
             "reconstruction_error": round(recon_error, 6),
             "stride_used": actual_stride,
+            "caveat": (
+                "Detected frames are learned hidden-state change-points from a single "
+                "trajectory, not independently validated structural transitions."
+            ),
         }
 
     except Exception as e:
