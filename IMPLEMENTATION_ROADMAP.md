@@ -1,4 +1,5 @@
 # Implementation Roadmap
+
 ## MD AI Analyzer - Scientific Strengthening Project
 
 **Based on:** SCIENTIFIC_ASSESSMENT.md evaluation
@@ -64,11 +65,13 @@ def compute_prs_hessian(universe, cutoff=15.0, gamma=1.0, **kwargs):
 ```
 
 **Testing:**
+
 1. Compare covariance-PRS vs. Hessian-PRS rankings on benchmark systems
 2. Expected: High correlation (ρ > 0.7) but not identical
 3. Validate against literature PRS studies (e.g., General et al. 2014)
 
 **Documentation Update:**
+
 - Add `prs_method` parameter: `"covariance"` (fast) or `"hessian"` (rigorous)
 - Default to `"hessian"`
 - Explain difference in README and paper
@@ -84,6 +87,7 @@ def compute_prs_hessian(universe, cutoff=15.0, gamma=1.0, **kwargs):
 **Problem:** Biological inference uses term "confidence" for uncalibrated heuristic scores.
 
 **Locations:**
+
 - `backend/bio_inference/engine.py` (all detector methods)
 - `backend/models.py` (Pydantic schema)
 - `frontend/app.js` (display logic)
@@ -117,6 +121,7 @@ insights.append({
 ```
 
 **Global Changes:**
+
 ```bash
 # Search and replace across codebase
 grep -r "confidence" backend/bio_inference/ backend/models.py frontend/
@@ -126,6 +131,7 @@ grep -r "confidence" backend/bio_inference/ backend/models.py frontend/
 ```
 
 **Frontend Display:**
+
 ```javascript
 // frontend/app.js
 // BEFORE:
@@ -221,6 +227,7 @@ def build_msm(...):
 ```
 
 **Visualization Update:**
+
 ```python
 # backend/visualization/plots.py
 
@@ -702,6 +709,7 @@ def compare_to_experimental_bfactors(predicted_rmsf, pdb_structure, pdb_id):
 Implementation of Dirichlet posterior on transition probabilities using PyMC.
 
 **Benefits:**
+
 - Credible intervals on kinetic parameters
 - Model selection via Bayes factors
 - Handles sparse data better
@@ -716,6 +724,7 @@ Implementation of Dirichlet posterior on transition probabilities using PyMC.
 Pre-train GNN on multiple protein families, fine-tune on target.
 
 **Benefits:**
+
 - Better generalization
 - Reduced overfitting
 - Cross-protein applicability
@@ -828,6 +837,7 @@ Compare your results to:
 ### 2. New METHODS.md File
 
 Detailed mathematical descriptions of:
+
 - Schlitter entropy formula with derivation
 - ANM Hessian construction
 - PRS using Hessian inversion vs. covariance
@@ -838,6 +848,7 @@ Detailed mathematical descriptions of:
 ### 3. VALIDATION.md File
 
 Benchmark results on:
+
 - DynDom (hinge detection)
 - AlloSigMA2 (allosteric pathways)
 - DUD-E (druggable pockets)
@@ -848,44 +859,51 @@ Benchmark results on:
 ## Success Metrics
 
 ### Phase 1 (Critical) - Must Achieve:
-- [x] PRS uses Hessian inversion (or clearly labeled as covariance-based)
-- [x] No use of "confidence" for uncalibrated scores
-- [x] MSM reports uncertainty quantification
-- [x] All claims include appropriate caveats
+
+- PRS uses Hessian inversion (or clearly labeled as covariance-based)
+- No use of "confidence" for uncalibrated scores
+- MSM reports uncertainty quantification
+- All claims include appropriate caveats
 
 ### Phase 2 (High Priority) - Target:
-- [ ] FDR correction available for all per-residue tests
-- [ ] GNN cross-validation shows test R² > 0.4
-- [ ] At least 3 biological detectors validated (precision > 0.5)
-- [ ] Bootstrap CIs available for RMSD, RMSF, entropy
+
+- FDR correction available for all per-residue tests
+- GNN cross-validation shows test R² > 0.4
+- At least 3 biological detectors validated (precision > 0.5)
+- Bootstrap CIs available for RMSD, RMSF, entropy
 
 ### Phase 3 (Medium Priority) - Desirable:
-- [ ] Multi-replica comparison framework functional
-- [ ] Experimental B-factor correlation tool working
-- [ ] Null model permutation tests for pathways
+
+- Multi-replica comparison framework functional
+- Experimental B-factor correlation tool working
+- Null model permutation tests for pathways
 
 ### Publication Readiness Checklist:
-- [ ] Methods section written (10+ pages)
-- [ ] Validation section with benchmarks
-- [ ] Code fully documented (docstrings + Sphinx)
-- [ ] Tutorial notebooks (3-5 examples)
-- [ ] Unit test coverage > 70%
-- [ ] Comparison to existing tools (GROMACS, PyEMMA, ProDy)
+
+- Methods section written (10+ pages)
+- Validation section with benchmarks
+- Code fully documented (docstrings + Sphinx)
+- Tutorial notebooks (3-5 examples)
+- Unit test coverage > 70%
+- Comparison to existing tools (GROMACS, PyEMMA, ProDy)
 
 ---
 
 ## Resource Requirements
 
 ### Compute:
+
 - **Phase 1:** Local machine (CPU sufficient)
 - **Phase 2 (validation):** GPU for GNN training, otherwise CPU
 - **Phase 3:** Cluster access for multi-replica simulations
 
 ### Time Estimate:
+
 - **1 full-time developer:** 12 weeks for Phases 1-2
 - **2 developers:** 6-7 weeks for Phases 1-2
 
 ### Dependencies to Add:
+
 ```txt
 # requirements_dev.txt
 statsmodels>=0.14.0  # FDR correction
@@ -901,19 +919,25 @@ sphinx>=7.0.0  # Documentation
 ## Risk Mitigation
 
 ### Risk: PRS rankings change significantly with Hessian method
+
 **Mitigation:**
+
 - Validate on literature PRS studies first
 - Offer both methods with documented trade-offs
 - Emphasize that qualitative rankings matter more than absolute magnitudes
 
 ### Risk: Biological detector validation shows poor precision
+
 **Mitigation:**
+
 - Frame as "feature detection" not "prediction"
 - Emphasize hypothesis-generation role
 - Report both precision and recall (favor recall for screening)
 
 ### Risk: Bootstrap CI calculation too slow for large proteins
+
 **Mitigation:**
+
 - Implement optional uncertainty (off by default)
 - Use n_bootstrap=100 instead of 1000 for large systems
 - Parallelize bootstrap loops with joblib
