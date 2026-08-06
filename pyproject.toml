@@ -4,17 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "md-ai-platform"
-version = "2.0.0"
-description = "Phase 1: Structural Biology Analysis Infrastructure"
+version = "3.0.0"
+description = "Deterministic MD analysis with a grounded LLM reporting layer"
 authors = [
     {name = "MD AI Analyzer Team"}
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.100.0",
     "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
     "uvicorn>=0.23.0",
+    "python-multipart>=0.0.9",
     "MDAnalysis>=2.6.0",
     "mdtraj>=1.9.9",
     "numpy>=1.24.0",
@@ -23,15 +25,32 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Hosted narrator. Without it the platform falls back to the deterministic
+# template narrator, so this is genuinely optional.
+llm = [
+    "anthropic>=0.39.0"
+]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21.0",
+    "httpx>=0.27.0",
     "black>=23.0",
     "isort>=5.12.0",
     "flake8>=6.0"
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.black]
+line-length = 90
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 90

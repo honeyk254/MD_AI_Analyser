@@ -22,3 +22,13 @@ Thumbs.db
 
 # Environment variables
 .env
+
+# Build artefacts
+*.egg-info/
+
+# Run outputs and uploaded inputs (demo data under data/demo is tracked)
+data/outputs/
+data/inputs/
+
+# Local configuration
+.env

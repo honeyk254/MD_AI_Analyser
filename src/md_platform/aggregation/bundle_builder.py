@@ -1,16 +1,35 @@
 """Aggregation layer.
 
-Collects individual module results and trajectory metadata to build the
-final, versioned AnalysisBundle.
+Collects module results and trajectory metadata into the final, versioned
+AnalysisBundle.
 """
 
-from typing import Dict, Any
-from datetime import datetime, timezone
 import sys
-import MDAnalysis
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
-from ..schemas.analysis_bundle import AnalysisBundle, ModuleResult, TrajectoryMetadata, QCFlags
-from ..schemas.run_card import RunCard, ToolVersions
+import MDAnalysis
+import mdtraj
+import numpy
+
+from ..schemas.analysis_bundle import (
+    AnalysisBundle,
+    ModuleResult,
+    QCFlag,
+    QCFlags,
+    TrajectoryMetadata,
+)
+from ..schemas.run_card import FileProvenance, RunCard, ToolVersions
+
+
+def tool_versions() -> ToolVersions:
+    """Versions of the libraries whose numerics the results depend on."""
+    return ToolVersions(
+        python=sys.version.split()[0],
+        mdanalysis=MDAnalysis.__version__,
+        mdtraj=mdtraj.__version__,
+        numpy=numpy.__version__,
+    )
 
 
 def build_bundle(
@@ -18,46 +37,46 @@ def build_bundle(
     trajectory_metadata: TrajectoryMetadata,
     qc_flags: QCFlags,
     module_results: Dict[str, ModuleResult],
-    inputs: Dict[str, Any],
+    inputs: Dict[str, FileProvenance],
     parameters: Dict[str, Any],
+    container_digest: Optional[str] = None,
 ) -> AnalysisBundle:
     """Build the final AnalysisBundle from all upstream components."""
-    
-    # 1. Update QC flags based on module outputs
-    # For example, check if RMSD found an equilibration point
-    if "rmsd" in module_results and not module_results["rmsd"].error:
-        equil_frame = module_results["rmsd"].data.get("equilibration_frame", 0)
-        qc_flags.is_equilibrated = equil_frame > 0
-        if not qc_flags.is_equilibrated:
-            qc_flags.flags.append(
-                {"check_name": "is_equilibrated", "passed": False, "details": "No stable RMSD equilibration point found."}
+    rmsd = module_results.get("rmsd")
+    if rmsd is not None and not rmsd.error:
+        equil_frame = rmsd.data.get("equilibration_frame")
+        qc_flags.is_equilibrated = equil_frame is not None
+        qc_flags.flags.append(
+            QCFlag(
+                check_name="is_equilibrated",
+                passed=qc_flags.is_equilibrated,
+                details=(
+                    f"RMSD trace settles at frame {equil_frame} "
+                    f"({rmsd.data.get('equilibration_method', 'heuristic')})."
+                    if qc_flags.is_equilibrated
+                    else "No stable RMSD equilibration point found."
+                ),
             )
-        else:
+        )
+
+    for name, result in module_results.items():
+        if result.error:
             qc_flags.flags.append(
-                {"check_name": "is_equilibrated", "passed": True, "details": f"Equilibrated at frame {equil_frame}."}
+                QCFlag(
+                    check_name=f"module_{name}",
+                    passed=False,
+                    details=f"Module did not produce results: {result.error}",
+                )
             )
 
-    # 2. Build the RunCard
-    # In a full implementation, `inputs` would contain file hashes
-    import mdtraj
-    import numpy
-    
-    tool_versions = ToolVersions(
-        python=sys.version.split()[0],
-        mdanalysis=MDAnalysis.__version__,
-        mdtraj=mdtraj.__version__,
-        numpy=numpy.__version__,
-    )
-    
     run_card = RunCard(
-        inputs=inputs,  # Expected to be Dict[str, FileProvenance]
-        tools=tool_versions,
-        container_digest=None,
+        inputs=inputs,
+        tools=tool_versions(),
+        container_digest=container_digest,
         parameters=parameters,
     )
-    
-    # 3. Assemble
-    bundle = AnalysisBundle(
+
+    return AnalysisBundle(
         run_id=run_id,
         created_at=datetime.now(timezone.utc),
         trajectory_metadata=trajectory_metadata,
@@ -65,5 +84,3 @@ def build_bundle(
         modules=module_results,
         run_card=run_card,
     )
-    
-    return bundle

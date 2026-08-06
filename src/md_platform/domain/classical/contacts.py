@@ -6,12 +6,13 @@ from C-alpha atom positions across all trajectory frames.
 
 import time
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.lib.distances import distance_array
 
 from ...schemas.analysis_bundle import ModuleResult
+from ..frames import FrameWindow, iter_frames
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -23,7 +24,12 @@ def select_ca_atoms(universe: mda.Universe) -> mda.AtomGroup:
     return universe.select_atoms("protein and name CA")
 
 
-def compute_contact_map(universe: mda.Universe, cutoff: float = 8.0, **kwargs) -> ModuleResult:
+def compute_contact_map(
+    universe: mda.Universe,
+    cutoff: float = 8.0,
+    window: Optional[FrameWindow] = None,
+    **kwargs,
+) -> ModuleResult:
     """Compute the average contact map and distance matrix between C-alpha atoms."""
     start_time = time.time()
 
@@ -32,7 +38,8 @@ def compute_contact_map(universe: mda.Universe, cutoff: float = 8.0, **kwargs) -
     if n_res == 0:
         raise ValueError("No CA atoms found for contact map.")
 
-    n_frames: int = len(universe.trajectory)
+    frames = iter_frames(universe, window)
+    n_frames: int = len(frames)
     logger.info(
         "Computing contact map for %d residues over %d frames (cutoff=%.1f A)",
         n_res, n_frames, cutoff,
@@ -41,7 +48,7 @@ def compute_contact_map(universe: mda.Universe, cutoff: float = 8.0, **kwargs) -
     contact_sum = np.zeros((n_res, n_res), dtype=np.float64)
     dist_sum = np.zeros((n_res, n_res), dtype=np.float64)
 
-    for ts in universe.trajectory:
+    for ts in frames:
         dists = distance_array(ca.positions, ca.positions, box=ts.dimensions)
         contact_sum += (dists <= cutoff).astype(np.float64)
         dist_sum += dists
@@ -81,7 +88,7 @@ def compute_contact_map(universe: mda.Universe, cutoff: float = 8.0, **kwargs) -
         name="contacts",
         version=__version__,
         runtime_seconds=time.time() - start_time,
-        parameters={"cutoff": cutoff},
+        parameters={"cutoff": cutoff, "n_frames": n_frames},
         data={
             "contact_map": contact_freq.tolist(),
             "avg_distance_matrix": avg_dist.tolist(),
