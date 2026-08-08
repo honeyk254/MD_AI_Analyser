@@ -1,0 +1,111 @@
+Metadata-Version: 2.4
+Name: md-ai-platform
+Version: 2.0.0
+Summary: Phase 1: Structural Biology Analysis Infrastructure
+Author: MD AI Analyzer Team
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.100.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: uvicorn>=0.23.0
+Requires-Dist: MDAnalysis>=2.6.0
+Requires-Dist: mdtraj>=1.9.9
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: plotly>=5.15.0
+Requires-Dist: kaleido>=0.2.1
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
+Requires-Dist: black>=23.0; extra == "dev"
+Requires-Dist: isort>=5.12.0; extra == "dev"
+Requires-Dist: flake8>=6.0; extra == "dev"
+
+# MD AI Platform
+
+An advanced, highly-modular platform for molecular dynamics trajectory analysis. This repository is currently implementing the **Phase 1 Architecture**, which provides a robust, decoupled, strictly-typed foundation for classical MD metrics analysis, paving the way for advanced machine learning models in future phases.
+
+## 🚀 Features (Phase 1)
+
+* **Strict Data Contracts:** All modules communicate using rigorously defined Pydantic v2 schemas (`AnalysisBundle`, `ModuleResult`, etc.).
+* **Decoupled Architecture:** Domain logic (MD analysis) is completely separated from the API layer (FastAPI) and the Reporting layer (HTML/Plotly).
+* **Automated Quality Control:** Trajectories are validated for consistency and sufficient length before any analysis runs.
+* **Classical MD Modules:**
+  * Root Mean Square Deviation (RMSD)
+  * Root Mean Square Fluctuation (RMSF)
+  * Radius of Gyration (Rg)
+  * Solvent Accessible Surface Area (SASA)
+  * Hydrogen Bonds
+  * Contact Maps (Distance Matrices)
+  * Secondary Structure Evolution
+  * Salt Bridges
+* **Containerized Deployment:** Ready to run anywhere using Docker and Docker Compose.
+* **Standalone HTML Reporting:** Generates beautiful, dark-themed, interactive Plotly charts bundled into a single portable HTML file.
+
+## 📦 Architecture Overview
+
+The system is organized into a modular monolith under `src/md_platform`:
+
+```
+src/md_platform/
+├── schemas/         # Pydantic v2 data models (AnalysisBundle, RunCard)
+├── domain/          # Core scientific logic (MDAnalysis, Parsing, Validation)
+│   └── classical/   # RMSD, RMSF, Rg, SASA, etc.
+├── aggregation/     # Assembles ModuleResults into the final AnalysisBundle
+├── orchestration/   # Ties the pipeline together asynchronously
+├── reporting/       # Generates JSON Plotly charts and standalone HTML reports
+├── api/             # FastAPI endpoints (submit, status, results)
+└── config.py        # Global environment settings
+```
+
+## 🛠 Installation & Usage
+
+The easiest way to run the platform is using Docker.
+
+### 1. Run via Docker Compose (Recommended)
+
+Ensure you have Docker installed, then run:
+
+```bash
+docker compose up -d --build
+```
+
+The API will be available at `http://localhost:8000`.
+
+### 2. Local Installation
+
+If you prefer to run natively, ensure you have Python 3.10+ installed.
+
+```bash
+# Clone the repository
+git clone https://github.com/honeyk254/MD_AI_Analyser.git
+cd MD_AI_Analyser
+
+# Install dependencies
+pip install -e .
+
+# Run the API server
+uvicorn md_platform.api.app:app --reload
+```
+
+## 🔌 API Endpoints
+
+* `POST /api/v1/analysis/submit`: Submit a new analysis run with a trajectory and topology.
+* `GET /api/v1/analysis/{run_id}/status`: Poll the current status of the pipeline.
+* `GET /api/v1/analysis/{run_id}/results`: Retrieve the final JSON `AnalysisBundle` with all computed metrics.
+
+## 🧪 Development & Testing
+
+We use `pytest` for all unit and integration testing.
+
+```bash
+pip install -e .[dev]
+pytest tests/
+```
+
+## 📋 Roadmap
+
+This project is currently executing against the `md-ai-platform-master-plan.md`. 
+* **Phase 1:** Core Data Structures & Classical MD (Completed)
+* **Phase 2:** Machine Learning Pipelines (Clustering, PCA, MSM)
+* **Phase 3:** Deep Learning Integration (GNNs, Transformers, VAEs)
+* **Phase 4:** Biological Inference Engine
