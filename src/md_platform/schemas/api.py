@@ -10,13 +10,15 @@ from typing import Dict, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class AnalysisStatus(str, Enum):
+class RunStatus(str, Enum):
     """Lifecycle states for an analysis job."""
 
     PENDING = "pending"
     RUNNING = "running"
+    HUMAN_REVIEW = "human_review"
     COMPLETED = "completed"
     FAILED = "failed"
+
 
 
 class UploadResponse(BaseModel):
@@ -34,6 +36,24 @@ class ErrorResponse(BaseModel):
     error_code: Optional[str] = None
 
 
+class StatusResponse(BaseModel):
+    """Response returned for a status check."""
+
+    run_id: str
+    status: RunStatus
+    message: str
+    results_url: Optional[str] = None
+    reviewer_signoff: Optional[str] = None
+
+
+class AnalysisResponse(BaseModel):
+    """Response returned after submitting an analysis."""
+
+    run_id: str
+    message: str
+    status_url: str
+
+
 class AnalysisRequest(BaseModel):
     """Parameters controlling the analysis pipeline.
 
@@ -41,6 +61,9 @@ class AnalysisRequest(BaseModel):
     """
 
     job_id: str
+    run_id: Optional[str] = None
+    topology_file: str
+    trajectory_file: str
 
     # Trajectory windowing
     stride: int = Field(default=1, ge=1)
@@ -66,11 +89,17 @@ class AnalysisRequest(BaseModel):
         return self
 
 
+class ReviewRequest(BaseModel):
+    """Human review sign-off for a generated report."""
+
+    reviewer_signoff: str = Field(min_length=1)
+
+
 class ProgressUpdate(BaseModel):
     """Schema for SSE progress events."""
 
     job_id: str
-    status: AnalysisStatus
+    status: RunStatus
     current_module: str
     progress_percent: float
     message: str

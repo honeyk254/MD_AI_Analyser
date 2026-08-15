@@ -3,11 +3,29 @@ version: "3.8"
 services:
   api:
     build: .
-    ports:
-      - "8000:8000"
+    restart: unless-stopped
+    expose:
+      - "8000"
     volumes:
       - ./data:/app/data
     environment:
-      - DEBUG=True
+      - DEBUG=False
       - OUTPUT_DIR=/app/data/outputs
       - DATA_DIR=/app/data/inputs
+      - MAX_REQUEST_BODY_BYTES=65536
+      - RATE_LIMIT_PER_MINUTE=30
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  proxy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro

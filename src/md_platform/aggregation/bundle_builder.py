@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 import sys
 import MDAnalysis
 
-from ..schemas.analysis_bundle import AnalysisBundle, ModuleResult, TrajectoryMetadata, QCFlags
-from ..schemas.run_card import RunCard, ToolVersions
+from ..schemas.analysis_bundle import AnalysisBundle, ModuleResult, TrajectoryMetadata, QCFlags, QCFlag
+from ..schemas.run_card import RunCard, ToolVersions, FileProvenance
 
 
 def build_bundle(
@@ -30,11 +30,11 @@ def build_bundle(
         qc_flags.is_equilibrated = equil_frame > 0
         if not qc_flags.is_equilibrated:
             qc_flags.flags.append(
-                {"check_name": "is_equilibrated", "passed": False, "details": "No stable RMSD equilibration point found."}
+                QCFlag(check_name="is_equilibrated", passed=False, details="No stable RMSD equilibration point found.")
             )
         else:
             qc_flags.flags.append(
-                {"check_name": "is_equilibrated", "passed": True, "details": f"Equilibrated at frame {equil_frame}."}
+                QCFlag(check_name="is_equilibrated", passed=True, details=f"Equilibrated at frame {equil_frame}.")
             )
 
     # 2. Build the RunCard
@@ -49,8 +49,21 @@ def build_bundle(
         numpy=numpy.__version__,
     )
     
+    import os
+    norm_inputs = {}
+    for k, v in inputs.items():
+        if isinstance(v, dict) and "file" in v:
+            path = v["file"]
+            try:
+                size = os.path.getsize(path)
+            except Exception:
+                size = 0
+            norm_inputs[k] = FileProvenance(filename=path, sha256=v.get("hash", "skipped"), size_bytes=size)
+        else:
+            norm_inputs[k] = v
+
     run_card = RunCard(
-        inputs=inputs,  # Expected to be Dict[str, FileProvenance]
+        inputs=norm_inputs,
         tools=tool_versions,
         container_digest=None,
         parameters=parameters,

@@ -27,6 +27,7 @@ from .domain.classical.salt_bridges import compute_salt_bridges
 from .aggregation.bundle_builder import build_bundle
 from .reporting.plots import generate_all_plots
 from .reporting.html_report import generate_html_report
+from .llm.orchestrator import LLMOrchestrator
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -40,6 +41,7 @@ class AnalysisOrchestrator:
         # Simple in-memory status tracking for Phase 1
         self.statuses: Dict[str, StatusResponse] = {}
         self.bundles: Dict[str, AnalysisBundle] = {}
+        self.drafts: Dict[str, str] = {}
 
     def get_status(self, run_id: str) -> StatusResponse:
         """Get current status of a run."""
@@ -49,7 +51,7 @@ class AnalysisOrchestrator:
 
     async def run_analysis(self, request: AnalysisRequest):
         """Execute the full analysis pipeline."""
-        run_id = request.run_id
+        run_id = request.run_id or request.job_id
         
         self.statuses[run_id] = StatusResponse(
             run_id=run_id, status=RunStatus.PENDING, message="Starting pipeline..."
@@ -116,18 +118,67 @@ class AnalysisOrchestrator:
             # 5. Reporting
             self.statuses[run_id].message = "Generating reports..."
             run_out_dir = self.output_dir / run_id
+            run_out_dir.mkdir(parents=True, exist_ok=True)
             plots = generate_all_plots(bundle)
-            generate_html_report(bundle, plots, run_out_dir)
             
+            # 6. LLM Narrative Generation
+            self.statuses[run_id].message = "Generating LLM narrative..."
+            llm_orchestrator = LLMOrchestrator()
+            draft_report = llm_orchestrator.generate_report(bundle)
+            self.drafts[run_id] = draft_report
+
             # Save bundle JSON
             bundle_json = run_out_dir / "bundle.json"
             bundle_json.write_text(bundle.model_dump_json(indent=2))
             
-            self.statuses[run_id].status = RunStatus.COMPLETED
-            self.statuses[run_id].message = "Analysis complete."
+            # Save draft report
+            draft_file = run_out_dir / "draft_report.md"
+            draft_file.write_text(draft_report)
+            generate_html_report(
+                bundle,
+                plots,
+                run_out_dir,
+                narrative_report=draft_report,
+            )
+            
+            self.statuses[run_id].status = RunStatus.HUMAN_REVIEW
+            self.statuses[run_id].message = "Draft report generated. Pending human review."
             self.statuses[run_id].results_url = f"/api/v1/analysis/{run_id}/results"
+            self.statuses[run_id].reviewer_signoff = None
             
         except Exception as e:
             logger.exception("Pipeline failed")
             self.statuses[run_id].status = RunStatus.FAILED
             self.statuses[run_id].message = str(e)
+
+    def approve_run(self, run_id: str, reviewer_signoff: str) -> StatusResponse:
+        """Approve a human-review run and mark it complete."""
+        status = self.get_status(run_id)
+        if status.status != RunStatus.HUMAN_REVIEW:
+            raise ValueError(f"Run {run_id} is not awaiting review.")
+
+        status.status = RunStatus.COMPLETED
+        status.message = "Run approved and finalized."
+        status.reviewer_signoff = reviewer_signoff
+        self.statuses[run_id] = status
+
+        bundle = self.bundles.get(run_id)
+        if bundle:
+            run_out_dir = self.output_dir / run_id
+            run_out_dir.mkdir(parents=True, exist_ok=True)
+            plots = generate_all_plots(bundle)
+            generate_html_report(
+                bundle,
+                plots,
+                run_out_dir,
+                narrative_report=self.drafts.get(run_id),
+                reviewer_signoff=reviewer_signoff,
+            )
+            final_report = run_out_dir / "final_report.md"
+            report_text = self.drafts.get(run_id)
+            if report_text:
+                final_report.write_text(
+                    f"{report_text}\n\n## Human Review\n{reviewer_signoff}\n"
+                )
+
+        return status

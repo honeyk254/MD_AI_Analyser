@@ -17,7 +17,7 @@ from .analysis_bundle import (
 from .run_card import FileProvenance, RunCard, ToolVersions
 from .api import (
     AnalysisRequest,
-    AnalysisStatus,
+    RunStatus,
     ErrorResponse,
     ProgressUpdate,
     UploadResponse,
@@ -38,7 +38,7 @@ __all__ = [
     "ToolVersions",
     # api
     "AnalysisRequest",
-    "AnalysisStatus",
+    "RunStatus",
     "ErrorResponse",
     "ProgressUpdate",
     "UploadResponse",
