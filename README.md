@@ -19,6 +19,15 @@ An advanced, highly-modular platform for molecular dynamics trajectory analysis.
 * **Containerized Deployment:** Ready to run anywhere using Docker and Docker Compose.
 * **Standalone HTML Reporting:** Generates beautiful, dark-themed, interactive Plotly charts bundled into a single portable HTML file.
 
+## 🧠 AI Taxonomy
+
+| Tier | What it is | Examples here | Rule |
+|---|---|---|---|
+| Deterministic algorithms | No learned parameters, exact math | RMSD, RMSF, Rg, SASA, H-bond geometry, DSSP, contacts, salt bridges | Ground truth. Never replace with ML. |
+| Classical unsupervised statistics | Learned from data, not deep learning | PCA, k-means/hierarchical clustering, 2D free-energy histograms | Standard, interpretable, cheap. Don't call it "AI." |
+| Deep learning (narrow, justified) | Neural nets, used only where classical methods are provably insufficient | TICA+MSM/VAMPnets (kinetics), autoencoder CVs | Each one must cite literature and state its failure mode. |
+| LLM layer | Application-layer synthesis, outside the taxonomy | Report generation | Never produces a number. Only narrates numbers that already exist. |
+
 ## 📦 Architecture Overview
 
 The system is organized into a modular monolith under `src/md_platform`:
@@ -49,6 +58,10 @@ docker compose up -d --build
 
 The API will be available at `http://localhost:8000`.
 
+Bundled demo trajectories are available at `GET /api/v1/demo/examples`, and you can launch one with `POST /api/v1/demo/{example_name}/submit`.
+
+For a host deployment, use the included `docker-compose.yml` stack: the API stays private on the Docker network and Caddy exposes port `80`.
+
 ### 2. Local Installation
 
 If you prefer to run natively, ensure you have Python 3.10+ installed.
@@ -70,6 +83,8 @@ uvicorn md_platform.api.app:app --reload
 * `POST /api/v1/analysis/submit`: Submit a new analysis run with a trajectory and topology.
 * `GET /api/v1/analysis/{run_id}/status`: Poll the current status of the pipeline.
 * `GET /api/v1/analysis/{run_id}/results`: Retrieve the final JSON `AnalysisBundle` with all computed metrics.
+* `GET /api/v1/demo/examples`: List bundled demo trajectories.
+* `POST /api/v1/demo/{example_name}/submit`: Run a bundled demo trajectory without uploading files.
 
 ## 🧪 Development & Testing
 
@@ -80,10 +95,31 @@ pip install -e .[dev]
 pytest tests/
 ```
 
+## 🚢 Deployment
+
+The shipped Docker image is self-contained. `docker compose up -d --build` starts the API and Caddy proxy, seeds bundled demo trajectories under `data/inputs`, and exposes the demo on port `80`.
+
 ## 📋 Roadmap
 
 This project is currently executing against the `md-ai-platform-master-plan.md`. 
-* **Phase 1:** Core Data Structures & Classical MD (Completed)
-* **Phase 2:** Machine Learning Pipelines (Clustering, PCA, MSM)
-* **Phase 3:** Deep Learning Integration (GNNs, Transformers, VAEs)
-* **Phase 4:** Biological Inference Engine
+* **Phase 1:** Deterministic classical engine (Completed)
+* **Phase 2:** Grounded LLM reporting (Target Demo State)
+* **Phase 3:** Lightweight deployment
+* **Phase 4:** Statistical/ML layer (TICA + MSM)
+
+## Demo
+
+A local demo run completed and produced a standalone HTML report.
+
+- Run ID: f47b4f30-02fe-4174-8f82-6682f7ec3711
+- Report path: data\outputs\f47b4f30-02fe-4174-8f82-6682f7ec3711\analysis_report.html
+
+Reproduce the demo:
+
+1. Start the API (Docker Compose recommended) or run `uvicorn md_platform.api.app:app --reload`.
+2. List bundled demos: GET /api/v1/demo/examples
+3. Submit the "stable" demo: POST /api/v1/demo/stable/submit
+4. Poll run status: GET /api/v1/analysis/{run_id}/status
+5. Retrieve results or open the HTML path above: GET /api/v1/analysis/{run_id}/results
+
+Notes: toy demo inputs may skip some protein-specific modules (SASA, secondary structure, etc.). Use a real PDB+XTC pair for full classical analyses.
