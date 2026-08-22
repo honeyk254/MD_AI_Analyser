@@ -15,35 +15,42 @@ from ..schemas.analysis_bundle import AnalysisBundle, ModuleResult
 
 logger = logging.getLogger("md_ai_analyzer")
 
-# --- Styling Constants ---
-ACCENT_CYAN = "#00d4ff"
-ACCENT_RED = "#ff4757"
-ACCENT_TEAL = "#20bf6b"
-ACCENT_YELLOW = "#fbc531"
-ACCENT_PURPLE = "#8c7ae6"
-ACCENT_DARK_PURPLE = "#6c5ce7"
-PLOT_BG = "#0f0f23"
-PAPER_BG = "#0f0f23"
-TEXT_COLOR = "#e0e0e0"
+# --- Neo-brutalist styling tokens (mirror the CSS tokens in html_report.py) ---
+BLACK = "#000000"
+WHITE = "#FFFFFF"
+PAPER_BEIGE = "#F5F5DC"
+ACCENT_TEAL = "#00C2CB"
+ACCENT_MAGENTA = "#FF00FF"
+ACCENT_YELLOW = "#FFD700"
+GRID_COLOR = "rgba(0,0,0,0.15)"
+HEADING_FONT = "Arial Black, Arial, sans-serif"
+BODY_FONT = "Helvetica Neue, Arial, sans-serif"
+BRUTALIST_SCALE = [[0.0, WHITE], [0.5, ACCENT_TEAL], [1.0, BLACK]]
 
-def apply_dark_theme(
+def apply_theme(
     fig: go.Figure,
     title: str,
     xaxis_title: str = "",
     yaxis_title: str = "",
     height: int = 500,
 ) -> go.Figure:
-    """Apply standard dark theme to a plotly figure."""
+    """Apply the neo-brutalist chart theme: white card, black strokes, bold type."""
     fig.update_layout(
-        title=dict(text=title, font=dict(color=TEXT_COLOR)),
-        xaxis=dict(title=xaxis_title, color=TEXT_COLOR, gridcolor="#2d3436", zerolinecolor="#2d3436"),
-        yaxis=dict(title=yaxis_title, color=TEXT_COLOR, gridcolor="#2d3436", zerolinecolor="#2d3436"),
-        paper_bgcolor=PAPER_BG,
-        plot_bgcolor=PLOT_BG,
-        font=dict(color=TEXT_COLOR, family="Inter, sans-serif"),
+        title=dict(text=title, font=dict(color=BLACK, size=20, family=HEADING_FONT)),
+        xaxis=dict(
+            title=xaxis_title, color=BLACK, gridcolor=GRID_COLOR,
+            zerolinecolor=BLACK, linecolor=BLACK, ticks="outside", tickcolor=BLACK,
+        ),
+        yaxis=dict(
+            title=yaxis_title, color=BLACK, gridcolor=GRID_COLOR,
+            zerolinecolor=BLACK, linecolor=BLACK, ticks="outside", tickcolor=BLACK,
+        ),
+        paper_bgcolor=WHITE,
+        plot_bgcolor=WHITE,
+        font=dict(color=BLACK, family=BODY_FONT, size=14),
         height=height,
-        margin=dict(t=50, b=50, l=50, r=20),
-        legend=dict(font=dict(color=TEXT_COLOR), bgcolor="rgba(0,0,0,0.5)"),
+        margin=dict(t=60, b=50, l=60, r=20),
+        legend=dict(font=dict(color=BLACK), bgcolor=WHITE, bordercolor=BLACK, borderwidth=2),
     )
     return fig
 
@@ -111,19 +118,18 @@ def _plot_rmsd(res: ModuleResult) -> Optional[go.Figure]:
     fig.add_trace(go.Scatter(
         x=times, y=metric.time_series,
         mode="lines", name="RMSD",
-        line=dict(color=ACCENT_CYAN, width=1.5),
-        fill="tozeroy", fillcolor="rgba(0,212,255,0.1)",
+        line=dict(color=ACCENT_TEAL, width=3),
     ))
     if equil_frame > 0 and len(times) > equil_frame:
         fig.add_vline(
-            x=times[equil_frame], line_dash="dash", line_color=ACCENT_RED,
+            x=times[equil_frame], line_dash="dash", line_color=ACCENT_MAGENTA, line_width=2,
             annotation_text="Equilibration",
         )
     fig.add_hline(
-        y=metric.mean, line_dash="dot", line_color=ACCENT_YELLOW,
+        y=metric.mean, line_dash="dot", line_color=ACCENT_YELLOW, line_width=2,
         annotation_text=f"Mean: {metric.mean:.2f} \u00c5",
     )
-    return apply_dark_theme(fig, "RMSD Over Time", "Time (ps)", "RMSD (\u00c5)")
+    return apply_theme(fig, "RMSD Over Time", "Time (ps)", "RMSD (\u00c5)")
 
 
 def _plot_rmsf(res: ModuleResult) -> Optional[go.Figure]:
@@ -138,19 +144,21 @@ def _plot_rmsf(res: ModuleResult) -> Optional[go.Figure]:
     colors = []
     for v in rmsf:
         if v > mean_r + std_r:
-            colors.append(ACCENT_RED)
+            colors.append(ACCENT_MAGENTA)
         elif v < mean_r - 0.5 * std_r:
             colors.append(ACCENT_TEAL)
         else:
-            colors.append(ACCENT_CYAN)
+            colors.append(BLACK)
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=resids, y=rmsf, marker_color=colors, name="RMSF"))
+    fig.add_trace(go.Bar(
+        x=resids, y=rmsf, marker_color=colors, marker_line_color=BLACK, marker_line_width=1, name="RMSF",
+    ))
     fig.add_hline(
-        y=mean_r, line_dash="dot", line_color=ACCENT_YELLOW,
+        y=mean_r, line_dash="dot", line_color=ACCENT_YELLOW, line_width=2,
         annotation_text=f"Mean: {mean_r:.2f} \u00c5",
     )
-    return apply_dark_theme(fig, "Per-Residue RMSF", "Residue ID", "RMSF (\u00c5)")
+    return apply_theme(fig, "Per-Residue RMSF", "Residue ID", "RMSF (\u00c5)")
 
 
 def _plot_rg(res: ModuleResult) -> Optional[go.Figure]:
@@ -162,11 +170,10 @@ def _plot_rg(res: ModuleResult) -> Optional[go.Figure]:
     fig.add_trace(go.Scatter(
         x=res.data["time_ps"], y=metric.time_series,
         mode="lines", name="Rg",
-        line=dict(color=ACCENT_PURPLE, width=1.5),
-        fill="tozeroy", fillcolor="rgba(162,155,254,0.1)",
+        line=dict(color=ACCENT_MAGENTA, width=3),
     ))
     trend = res.data.get("trend", "N/A")
-    return apply_dark_theme(fig, f"Radius of Gyration (Trend: {trend})", "Time (ps)", "Rg (\u00c5)")
+    return apply_theme(fig, f"Radius of Gyration (Trend: {trend})", "Time (ps)", "Rg (\u00c5)")
 
 
 def _plot_sasa(res: ModuleResult) -> Optional[go.Figure]:
@@ -178,10 +185,9 @@ def _plot_sasa(res: ModuleResult) -> Optional[go.Figure]:
     fig.add_trace(go.Scatter(
         x=res.data["time_ps"], y=metric.time_series,
         mode="lines", name="Total SASA",
-        line=dict(color="#fd79a8", width=1.5),
-        fill="tozeroy", fillcolor="rgba(253,121,168,0.1)",
+        line=dict(color=ACCENT_TEAL, width=3),
     ))
-    return apply_dark_theme(fig, "Solvent Accessible Surface Area", "Time (ps)", "SASA (nm\u00b2)")
+    return apply_theme(fig, "Solvent Accessible Surface Area", "Time (ps)", "SASA (nm\u00b2)")
 
 
 def _plot_hbonds(res: ModuleResult) -> Optional[go.Figure]:
@@ -193,10 +199,9 @@ def _plot_hbonds(res: ModuleResult) -> Optional[go.Figure]:
     fig.add_trace(go.Scatter(
         x=res.data["time_ps"], y=metric.time_series,
         mode="lines", name="H-bonds",
-        line=dict(color=ACCENT_DARK_PURPLE, width=1.5),
-        fill="tozeroy", fillcolor="rgba(108,92,231,0.1)",
+        line=dict(color=BLACK, width=3),
     ))
-    return apply_dark_theme(fig, f"Hydrogen Bonds (Mean: {metric.mean:.1f})", "Time (ps)", "Number of H-bonds")
+    return apply_theme(fig, f"Hydrogen Bonds (Mean: {metric.mean:.1f})", "Time (ps)", "Number of H-bonds")
 
 
 def _plot_contact_map(res: ModuleResult) -> Optional[go.Figure]:
@@ -208,10 +213,10 @@ def _plot_contact_map(res: ModuleResult) -> Optional[go.Figure]:
 
     fig = go.Figure(data=go.Heatmap(
         z=cmap, x=resids, y=resids,
-        colorscale="Viridis",
-        colorbar=dict(title="Contact Freq"),
+        colorscale=BRUTALIST_SCALE,
+        colorbar=dict(title="Contact Freq", outlinecolor=BLACK, outlinewidth=2),
     ))
-    return apply_dark_theme(fig, "Average Contact Map", "Residue ID", "Residue ID")
+    return apply_theme(fig, "Average Contact Map", "Residue ID", "Residue ID")
 
 
 def _plot_secondary_structure(res: ModuleResult) -> Optional[go.Figure]:
@@ -227,15 +232,15 @@ def _plot_secondary_structure(res: ModuleResult) -> Optional[go.Figure]:
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=frames, y=h, mode="lines", name="\u03b1-Helix", line=dict(color=ACCENT_RED, width=1.5),
+        x=frames, y=h, mode="lines", name="\u03b1-Helix", line=dict(color=ACCENT_MAGENTA, width=3),
     ))
     fig.add_trace(go.Scatter(
-        x=frames, y=s, mode="lines", name="\u03b2-Sheet", line=dict(color=ACCENT_TEAL, width=1.5),
+        x=frames, y=s, mode="lines", name="\u03b2-Sheet", line=dict(color=ACCENT_TEAL, width=3),
     ))
     fig.add_trace(go.Scatter(
-        x=frames, y=c, mode="lines", name="Coil", line=dict(color=ACCENT_YELLOW, width=1.5),
+        x=frames, y=c, mode="lines", name="Coil", line=dict(color=BLACK, width=3),
     ))
-    return apply_dark_theme(fig, "Secondary Structure Evolution", "Frame", "Fraction")
+    return apply_theme(fig, "Secondary Structure Evolution", "Frame", "Fraction")
 
 
 def _plot_salt_bridges(res: ModuleResult) -> Optional[go.Figure]:
@@ -255,8 +260,7 @@ def _plot_salt_bridges(res: ModuleResult) -> Optional[go.Figure]:
     fig.add_trace(go.Scatter(
         x=times, y=metric.time_series,
         mode="lines", name="Salt Bridges/Frame",
-        line=dict(color=ACCENT_YELLOW, width=1.5),
-        fill="tozeroy", fillcolor="rgba(255,217,61,0.1)",
+        line=dict(color=ACCENT_TEAL, width=3),
     ), row=1, col=1)
 
     if pairs:
@@ -264,10 +268,10 @@ def _plot_salt_bridges(res: ModuleResult) -> Optional[go.Figure]:
         occupancies = [p["occupancy"] for p in pairs[:20]]
         fig.add_trace(go.Bar(
             x=labels, y=occupancies,
-            marker_color="#fdcb6e", name="Occupancy",
+            marker_color=ACCENT_YELLOW, marker_line_color=BLACK, marker_line_width=1, name="Occupancy",
         ), row=2, col=1)
 
-    return apply_dark_theme(fig, f"Salt Bridges (Mean: {metric.mean:.1f}/frame)", "", "", height=600)
+    return apply_theme(fig, f"Salt Bridges (Mean: {metric.mean:.1f}/frame)", "", "", height=600)
 
 
 def _plot_ml_comparison(ml_bundle: MLAnalysisBundle) -> Optional[go.Figure]:
@@ -287,7 +291,7 @@ def _plot_ml_comparison(ml_bundle: MLAnalysisBundle) -> Optional[go.Figure]:
             x=pca[:, 0],
             y=pca[:, 1],
             mode="markers",
-            marker=dict(color=pca_labels, colorscale="Viridis", size=6),
+            marker=dict(color=pca_labels, colorscale=BRUTALIST_SCALE, size=8, line=dict(color=BLACK, width=1)),
             name="PCA states",
         ),
         row=1,
@@ -298,22 +302,24 @@ def _plot_ml_comparison(ml_bundle: MLAnalysisBundle) -> Optional[go.Figure]:
             x=tica[:, 0],
             y=tica[:, 1],
             mode="markers",
-            marker=dict(color=tica_labels, colorscale="Viridis", size=6),
+            marker=dict(color=tica_labels, colorscale=BRUTALIST_SCALE, size=8, line=dict(color=BLACK, width=1)),
             name="TICA states",
         ),
         row=1,
         col=2,
     )
     fig.update_layout(
-        title=dict(text="PCA vs TICA baseline comparison", font=dict(color=TEXT_COLOR)),
-        paper_bgcolor=PAPER_BG,
-        plot_bgcolor=PLOT_BG,
-        font=dict(color=TEXT_COLOR, family="Inter, sans-serif"),
+        title=dict(text="PCA vs TICA baseline comparison", font=dict(color=BLACK, size=20, family=HEADING_FONT)),
+        paper_bgcolor=WHITE,
+        plot_bgcolor=WHITE,
+        font=dict(color=BLACK, family=BODY_FONT, size=14),
         height=500,
         margin=dict(t=60, b=40, l=50, r=20),
+        legend=dict(font=dict(color=BLACK), bgcolor=WHITE, bordercolor=BLACK, borderwidth=2),
     )
-    fig.update_xaxes(title_text="Component 1", color=TEXT_COLOR, gridcolor="#2d3436")
-    fig.update_yaxes(title_text="Component 2", color=TEXT_COLOR, gridcolor="#2d3436")
+    fig.update_annotations(font=dict(color=BLACK, family=BODY_FONT))
+    fig.update_xaxes(title_text="Component 1", color=BLACK, gridcolor=GRID_COLOR, linecolor=BLACK)
+    fig.update_yaxes(title_text="Component 2", color=BLACK, gridcolor=GRID_COLOR, linecolor=BLACK)
     return fig
 
 
@@ -331,14 +337,16 @@ def _plot_tica_embedding(ml_bundle: MLAnalysisBundle) -> Optional[go.Figure]:
             mode="markers",
             marker=dict(
                 color=np.arange(len(tica)),
-                size=6,
-                colorscale="Viridis",
+                size=8,
+                colorscale=[[0.0, ACCENT_TEAL], [1.0, BLACK]],
+                line=dict(color=BLACK, width=1),
                 showscale=True,
+                colorbar=dict(outlinecolor=BLACK, outlinewidth=2),
             ),
             name="TICA",
         )
     )
-    return apply_dark_theme(fig, "TICA embedding", "tIC1", "tIC2")
+    return apply_theme(fig, "TICA embedding", "tIC1", "tIC2")
 
 
 def _plot_msm_timescales(ml_bundle: MLAnalysisBundle) -> Optional[go.Figure]:
@@ -352,12 +360,12 @@ def _plot_msm_timescales(ml_bundle: MLAnalysisBundle) -> Optional[go.Figure]:
         go.Bar(
             x=[f"t{i+1}" for i in range(len(timescales))],
             y=timescales,
-            marker_color=ACCENT_PURPLE,
+            marker_color=ACCENT_TEAL, marker_line_color=BLACK, marker_line_width=1,
             name="Implied timescales",
         )
     )
     fig.add_hline(
         y=0,
-        line_color=ACCENT_RED,
+        line_color=BLACK,
     )
-    return apply_dark_theme(fig, "MSM implied timescales", "Mode", "Timescale (ps)")
+    return apply_theme(fig, "MSM implied timescales", "Mode", "Timescale (ps)")

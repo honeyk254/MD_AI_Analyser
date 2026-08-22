@@ -70,13 +70,17 @@ def generate_html_report(
     if ml_summary:
         gating = ml_summary["gating"]
         baseline = ml_summary.get("baseline_comparison") or {}
+        status_badge = "badge-teal" if ml_summary["status"] == "completed" else "badge-yellow"
+        gate_badge = "badge-teal" if gating["passed"] else "badge-magenta"
         ml_html = f"""
         <section class="narrative-section">
             <h2>Phase 4 ML Summary</h2>
-            <p><strong>Status:</strong> {escape(str(ml_summary['status']))}</p>
-            <p><strong>Gate passed:</strong> {escape(str(gating['passed']))}</p>
-            <p><strong>Baseline agreement:</strong> {escape(str(baseline.get('state_agreement_nmi', 'n/a')))}</p>
-            <p><strong>CK cutoff:</strong> {gating['ck_cutoff']}</p>
+            <div>
+                <span class="badge {status_badge}">Status: {escape(str(ml_summary['status']))}</span>
+                <span class="badge {gate_badge}">Gate {'PASSED' if gating['passed'] else 'BLOCKED'}</span>
+                <span class="badge badge-yellow">CK cutoff: {gating['ck_cutoff']}</span>
+            </div>
+            <p><strong>Baseline agreement (NMI):</strong> {escape(str(baseline.get('state_agreement_nmi', 'n/a')))}</p>
         </section>
         """
 
@@ -98,25 +102,87 @@ def generate_html_report(
     <title>MD AI Analysis Report</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
+        :root {{
+            --black: #000000;
+            --white: #FFFFFF;
+            --paper-beige: #F5F5DC;
+            --accent-teal: #00C2CB;
+            --accent-magenta: #FF00FF;
+            --accent-yellow: #FFD700;
+            --radius-1: 12px;
+            --radius-2: 24px;
+            --shadow-1: 4px 4px 0px var(--black);
+            --shadow-2: 12px 12px 0px var(--black);
+        }}
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-        body {{ font-family: 'Inter', -apple-system, sans-serif; background: #0f0f23; color: #e0e0e0; line-height: 1.6; }}
-        .container {{ max-width: 1200px; margin: 0 auto; padding: 20px; }}
-        h1 {{ color: #00d4ff; font-size: 2em; border-bottom: 2px solid #1a1a3e; padding-bottom: 15px; margin-bottom: 20px; }}
-        h2 {{ color: #a29bfe; margin: 30px 0 15px; }}
-        h3 {{ color: #ddd; margin: 20px 0 10px; }}
-        .info-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }}
-        .info-card {{ background: #1a1a3e; border-radius: 12px; padding: 15px; text-align: center; }}
-        .info-card .value {{ font-size: 1.8em; font-weight: bold; color: #00d4ff; }}
-        .info-card .label {{ color: #999; font-size: 0.85em; }}
-        .plot-section {{ background: #1a1a2e; border-radius: 12px; padding: 20px; margin: 20px 0; }}
+        body {{
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background: var(--paper-beige); color: var(--black);
+            font-size: 18px; line-height: 1.6;
+        }}
+        .container {{ max-width: 1200px; margin: 0 auto; padding: 24px; }}
+        h1 {{
+            font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+            font-size: 64px; font-weight: 900; text-transform: uppercase;
+            letter-spacing: -1px; line-height: 1.1; padding: 24px 0;
+        }}
+        .title-bar {{ display: block; width: 96px; height: 12px; background: var(--accent-yellow); margin-bottom: 24px; }}
+        h2 {{
+            font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+            font-size: 32px; text-transform: uppercase; margin: 48px 0 16px;
+            display: flex; align-items: center; gap: 12px;
+        }}
+        h2::before {{ content: ''; width: 16px; height: 32px; background: var(--accent-teal); flex: none; }}
+        h3 {{ font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif; font-size: 18px; margin: 0 0 12px; }}
+        .info-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; margin: 24px 0; }}
+        .info-card {{
+            background: var(--white); border: 3px solid var(--black);
+            border-radius: var(--radius-1); box-shadow: var(--shadow-1);
+            padding: 24px; text-align: center;
+        }}
+        .info-card .value {{ font-family: 'Arial Black', Arial, sans-serif; font-size: 32px; font-weight: 900; }}
+        .info-card:first-child .value {{ color: var(--accent-teal); -webkit-text-stroke: 1px var(--black); }}
+        .info-card .label {{ font-size: 14px; text-transform: uppercase; font-weight: bold; }}
+        .plot-section {{
+            background: var(--white); border: 3px solid var(--black);
+            border-radius: var(--radius-1); box-shadow: var(--shadow-1);
+            padding: 24px; margin: 24px 0;
+        }}
         .plot-container {{ width: 100%; min-height: 400px; }}
-        .narrative-section, .audit-section {{ background: #141428; border-radius: 12px; padding: 20px; margin: 20px 0; }}
-        .narrative-section pre {{ white-space: pre-wrap; font-family: inherit; color: #d6d6f2; }}
+        .narrative-section {{
+            background: var(--white); border: 3px solid var(--black);
+            border-radius: var(--radius-1); box-shadow: var(--shadow-1);
+            padding: 24px; margin: 24px 0;
+        }}
+        .narrative-section pre {{ white-space: pre-wrap; font-family: inherit; font-size: 18px; }}
+        .audit-section {{
+            background: var(--black); color: var(--white);
+            border: 3px solid var(--black); border-radius: var(--radius-1);
+            box-shadow: var(--shadow-1); padding: 24px; margin: 24px 0;
+        }}
+        .audit-section h2 {{
+            color: var(--accent-yellow);
+        }}
+        .audit-section h2::before {{ background: var(--accent-yellow); }}
+        .badge {{
+            display: inline-block; padding: 4px 12px; margin: 0 8px 8px 0;
+            border: 3px solid var(--black); border-radius: var(--radius-1);
+            font-family: 'Arial Black', Arial, sans-serif; font-size: 14px;
+            font-weight: 900; text-transform: uppercase;
+        }}
+        .badge-teal {{ background: var(--accent-teal); color: var(--black); }}
+        .badge-yellow {{ background: var(--accent-yellow); color: var(--black); }}
+        .badge-magenta {{ background: var(--accent-magenta); color: var(--black); }}
+        footer {{
+            text-align: center; font-size: 14px; text-transform: uppercase; font-weight: bold;
+            margin-top: 48px; padding: 24px; border-top: 3px solid var(--black);
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <h1>MD AI Analysis Report</h1>
+        <span class="title-bar"></span>
 
         <h2>Trajectory Statistics</h2>
         <div class="info-grid">
@@ -146,7 +212,7 @@ def generate_html_report(
 
         {audit_html}
 
-        <footer style="text-align: center; color: #666; margin-top: 40px; padding: 20px; border-top: 1px solid #1a1a3e;">
+        <footer>
             Generated by MD AI Analyzer
         </footer>
     </div>
