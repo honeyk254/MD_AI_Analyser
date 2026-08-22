@@ -4,8 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import md_platform.api.app as app_module
-from md_platform.api.app import _request_buckets, app
 from md_platform.api import dependencies
+from md_platform.api.app import _request_buckets, app
 from md_platform.demo_inputs import ensure_demo_inputs
 
 

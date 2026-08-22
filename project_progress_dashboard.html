@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MD AI Platform — Project Progress</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: #0f0f23; color: #e0e0e0; line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 30px 20px; }
+  h1 { color: #00d4ff; font-size: 1.9em; border-bottom: 2px solid #1a1a3e; padding-bottom: 12px; margin-bottom: 8px; }
+  .subtitle { color: #999; margin-bottom: 30px; }
+  h2 { color: #a29bfe; margin: 34px 0 14px; }
+  .card { background: #1a1a3e; border-radius: 12px; padding: 18px; margin: 14px 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin: 16px 0; }
+  .kpi { background: #1a1a3e; border-radius: 12px; padding: 15px; text-align: center; }
+  .kpi .value { font-size: 1.8em; font-weight: bold; color: #00d4ff; }
+  .kpi .label { color: #999; font-size: 0.85em; }
+  .kpi .value.green { color: #20bf6b; }
+  .kpi .value.red { color: #ff4757; }
+  .kpi .value.yellow { color: #fbc531; }
+
+  .phase { margin: 12px 0; }
+  .phase-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .phase-title { font-weight: 600; }
+  .phase-title .status-chip { font-size: 0.72em; padding: 2px 10px; border-radius: 99px; margin-left: 10px; vertical-align: middle; }
+  .done   { background: rgba(32,191,107,0.18); color: #20bf6b; }
+  .wip    { background: rgba(251,197,49,0.15); color: #fbc531; }
+  .todo   { background: rgba(255,71,87,0.12); color: #ff8a95; }
+  .pct { color: #999; font-size: 0.9em; }
+  .bar-track { background: #141428; border-radius: 99px; height: 14px; margin: 6px 0 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 99px; }
+  .fill-done { background: linear-gradient(90deg, #20bf6b, #00d4ff); }
+  .fill-wip  { background: linear-gradient(90deg, #fbc531, #ff793f); }
+  .fill-todo { background: #444; }
+  .phase-notes { font-size: 0.85em; color: #aaa; }
+  .phase-notes .ok { color: #20bf6b; }
+  .phase-notes .miss { color: #ff8a95; }
+
+  .loc-row { display: grid; grid-template-columns: 150px 1fr 70px; gap: 10px; align-items: center; margin: 7px 0; font-size: 0.92em; }
+  .loc-track { background: #141428; border-radius: 6px; height: 18px; overflow: hidden; }
+  .loc-fill { height: 100%; background: linear-gradient(90deg, #00d4ff, #8c7ae6); }
+  .loc-uncommitted { background: linear-gradient(90deg, #fbc531, #fd79a8); }
+  .loc-num { color: #999; text-align: right; }
+
+  .timeline { border-left: 3px solid #2d3436; margin: 10px 0 10px 8px; padding-left: 22px; }
+  .tl-item { position: relative; margin: 14px 0; }
+  .tl-item::before { content: ''; position: absolute; left: -29.5px; top: 7px; width: 12px; height: 12px; border-radius: 50%; background: #00d4ff; }
+  .tl-item.milestone::before { background: #20bf6b; box-shadow: 0 0 8px #20bf6b; }
+  .tl-item.reset::before { background: #ff4757; }
+  .tl-item.wip::before { background: #fbc531; }
+  .tl-date { color: #00d4ff; font-size: 0.82em; font-weight: 600; }
+  .tl-text { font-size: 0.92em; color: #ccc; }
+  .chip { display: inline-block; font-size: 0.75em; padding: 1px 9px; border-radius: 99px; margin-left: 8px; background: #141428; color: #aaa; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+  th { color: #a29bfe; text-align: left; padding: 8px 10px; border-bottom: 1px solid #2d3436; }
+  td { padding: 7px 10px; border-bottom: 1px solid #1e1e3a; color: #ccc; }
+  .pass { color: #20bf6b; } .fail { color: #ff4757; }
+
+  .callout { background: rgba(251,197,49,0.08); border: 1px solid rgba(251,197,49,0.35); border-radius: 12px; padding: 14px 18px; margin: 14px 0; font-size: 0.92em; }
+  footer { text-align: center; color: #666; margin-top: 44px; padding-top: 18px; border-top: 1px solid #1a1a3e; font-size: 0.85em; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>MD AI Platform — Progress Dashboard</h1>
+  <div class="subtitle">Generated 2026-08-22 &middot; vs. <em>md-ai-platform-master-plan.md</em> &middot; HEAD <code>4501376</code> + uncommitted Phase&nbsp;4 work</div>
+
+  <div class="grid">
+    <div class="kpi"><div class="value green">86%</div><div class="label">Core demo target<br>(Phases 0–2, effort-weighted)</div></div>
+    <div class="kpi"><div class="value">75%</div><div class="label">Full plan through Phase 5<br>(Phase 6 excluded)</div></div>
+    <div class="kpi"><div class="value">8/8</div><div class="label">Classical modules<br>(Phase 1 scope complete)</div></div>
+    <div class="kpi"><div class="value">4,266</div><div class="label">Lines of Python<br>(src + tests + demo)</div></div>
+    <div class="kpi"><div class="value yellow">15/17</div><div class="label">Tests passing<br>(2 Phase-4 WIP failures)</div></div>
+  </div>
+
+  <h2>Phase progress <span class="chip">effort-weighted from master plan</span></h2>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-title">Phase 0 — Foundation &amp; contracts <span class="status-chip done">mostly done</span></span><span class="pct">80%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-done" style="width:80%"></div></div>
+    <div class="phase-notes"><span class="ok">✓ AnalysisBundle + RunCard Pydantic v2 contracts</span> &middot; <span class="ok">✓ repo skeleton, docker-compose</span> &middot; <span class="miss">✗ GitHub Actions CI</span> &middot; <span class="miss">✗ published reference trajectories (synthetic demo inputs used instead)</span></div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-title">Phase 1 — Deterministic classical engine <span class="status-chip done">mostly done</span></span><span class="pct">85%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-done" style="width:85%"></div></div>
+    <div class="phase-notes"><span class="ok">✓ all 8 planned modules: RMSD, RMSF, Rg, SASA, H-bonds, contacts, DSSP, salt bridges</span> &middot; <span class="ok">✓ every module writes to the bundle contract</span> &middot; <span class="ok">✓ HTML report with plots</span> &middot; <span class="miss">✗ numerical regression suite vs. literature ranges</span></div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-title">Phase 2 — Grounded LLM reporting <span class="status-chip done">target demo state</span></span><span class="pct">90%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-done" style="width:90%"></div></div>
+    <div class="phase-notes"><span class="ok">✓ deterministic aggregation (report_summary)</span> &middot; <span class="ok">✓ 3-tool orchestrator exactly as planned</span> &middot; <span class="ok">✓ grounding checker + injected-error test</span> &middot; <span class="ok">✓ human review gate with sign-off</span> &middot; <span class="miss">✗ latency / cost-per-report tracking</span></div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-title">Phase 3 — Lightweight deployment <span class="status-chip wip">local only</span></span><span class="pct">60%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-wip" style="width:60%"></div></div>
+    <div class="phase-notes"><span class="ok">✓ docker-compose + Caddy reverse proxy</span> &middot; <span class="ok">✓ rate limiting + request-body caps</span> &middot; <span class="ok">✓ zero-setup bundled demo trajectories</span> &middot; <span class="miss">✗ deployed to a public host (Fly.io/Render)</span></div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-title">Phase 4 — TICA + MSM statistical layer <span class="status-chip wip">uncommitted WIP</span></span><span class="pct">75%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-wip" style="width:75%"></div></div>
+    <div class="phase-notes"><span class="ok">✓ TICA + MSM + PCA baseline (hand-rolled NumPy, not deeptime)</span> &middot; <span class="ok">✓ min-frame / min-transition gating with refusal reasons</span> &middot; <span class="ok">✓ CK validation + Analysis Card</span> &middot; <span class="ok">✓ refuses insufficient data (tested)</span> &middot; <span class="miss">✗ 2 of 4 tests failing (schema-bound mismatch in fixtures)</span> &middot; <span class="miss">✗ not committed — 685 LOC sitting in working tree</span></div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-title">Phase 5 — Testing rigor + Analysis Cards <span class="status-chip wip">early</span></span><span class="pct">30%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-wip" style="width:30%"></div></div>
+    <div class="phase-notes"><span class="ok">✓ Analysis Card embedded in the ML bundle</span> &middot; <span class="ok">✓ schema contract tests exist</span> &middot; <span class="miss">✗ formal LLM eval harness with scored rubric</span> &middot; <span class="miss">✗ CI pipeline</span></div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-title">Phase 6 — Stretch (VAMPnets, AWS, tracing) <span class="status-chip todo">not started</span></span><span class="pct">0%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-todo" style="width:0%"></div></div>
+    <div class="phase-notes">Correctly deferred — plan marks this as upside, not requirement.</div>
+  </div>
+
+  <h2>Code by subsystem <span class="chip">src/ = 3,804 LOC &middot; amber bar = uncommitted</span></h2>
+  <div class="card">
+    <div class="loc-row"><span>domain (classical)</span><div class="loc-track"><div class="loc-fill" style="width:100%"></div></div><span class="loc-num">1,047</span></div>
+    <div class="loc-row"><span>ml (Phase 4)</span><div class="loc-track"><div class="loc-uncommitted" style="width:65%"></div></div><span class="loc-num">685</span></div>
+    <div class="loc-row"><span>reporting</span><div class="loc-track"><div class="loc-fill" style="width:50%"></div></div><span class="loc-num">519</span></div>
+    <div class="loc-row"><span>llm (grounding)</span><div class="loc-track"><div class="loc-fill" style="width:39%"></div></div><span class="loc-num">413</span></div>
+    <div class="loc-row"><span>core+demo</span><div class="loc-track"><div class="loc-fill" style="width:37%"></div></div><span class="loc-num">383</span></div>
+    <div class="loc-row"><span>schemas</span><div class="loc-track"><div class="loc-fill" style="width:30%"></div></div><span class="loc-num">316</span></div>
+    <div class="loc-row"><span>api</span><div class="loc-track"><div class="loc-fill" style="width:22%"></div></div><span class="loc-num">227</span></div>
+    <div class="loc-row"><span>aggregation</span><div class="loc-track"><div class="loc-fill" style="width:20%"></div></div><span class="loc-num">214</span></div>
+  </div>
+
+  <h2>Timeline <span class="chip">20 commits &middot; two-architecture history</span></h2>
+  <div class="card">
+    <div class="timeline">
+      <div class="tl-item"><div class="tl-date">2026-03-08</div><div class="tl-text">v1 prototype born: initial 21-module codebase <span class="chip">812k lines incl. data</span></div></div>
+      <div class="tl-item"><div class="tl-date">2026-03-08 → 03-15</div><div class="tl-text">v1 hardening sprint — 9 scientific-audit / correctness / UI commits</div></div>
+      <div class="tl-item"><div class="tl-date">2026-03-28</div><div class="tl-text">Master plan + project docs written</div></div>
+      <div class="tl-item reset"><div class="tl-date">2026-07-28</div><div class="tl-text"><strong>The great reset:</strong> v1 codebase deleted (−539k lines) — rebuild per master plan</div></div>
+      <div class="tl-item"><div class="tl-date">2026-08-02</div><div class="tl-text">Phase 1 architecture: orchestrator, data contracts, API</div></div>
+      <div class="tl-item"><div class="tl-date">2026-08-08</div><div class="tl-text">Project structure + core classical analysis modules</div></div>
+      <div class="tl-item milestone"><div class="tl-date">2026-08-15</div><div class="tl-text"><strong>Phase 2 complete in one day</strong> — API platform, reporting, copilot (+2,740 lines); demo run succeeded; README updated</div></div>
+      <div class="tl-item wip"><div class="tl-date">2026-08-22 (today)</div><div class="tl-text">Phase 4 ML layer in working tree — 9 files modified, 2 new dirs, 2 tests red</div></div>
+    </div>
+  </div>
+
+  <h2>Test suite <span class="chip">17 checks &middot; 15 pass / 2 fail</span></h2>
+  <table>
+    <tr><th>File</th><th>Covers</th><th>Result</th></tr>
+    <tr><td>test_api.py</td><td>Health endpoint</td><td class="pass">pass</td></tr>
+    <tr><td>test_schemas.py</td><td>Bundle schema contract</td><td class="pass">pass</td></tr>
+    <tr><td>test_phase2.py</td><td>Demo inputs, endpoints, rate limiting, request guard</td><td class="pass">pass</td></tr>
+    <tr><td>test_phase3.py</td><td>Grounding catches injected errors, report summary, review gate</td><td class="pass">pass</td></tr>
+    <tr><td>test_phase4.py</td><td>ML bundle + summary, refusal on insufficient frames, ML grounding</td><td class="fail">2 of 4 fail (uncommitted WIP)</td></tr>
+  </table>
+
+  <div class="callout">
+    <strong>Current work &amp; blockers.</strong> Phase 4 (TICA+MSM) is functionally implemented but uncommitted.
+    The two red tests fail on an <code>AnalysisRequest</code> validation bound in the test fixtures, and the audit found a
+    <code>gating_reasons</code>-used-before-assignment crash path in <code>ml/analysis.py:44</code>.
+    Fastest path to green: fix the fixtures, fix the exception path, commit Phase 4.
+  </div>
+
+  <footer>MD AI Analyzer — progress snapshot generated from git history, LOC counts, and the master plan &middot; 2026-08-22</footer>
+</div>
+</body>
+</html>

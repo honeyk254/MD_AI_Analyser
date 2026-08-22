@@ -5,14 +5,15 @@ Computes hydrogen bonds over the trajectory using MDAnalysis
 frequent donor--acceptor pairs.
 """
 
-import time
 import logging
+import time
 from typing import Any, Dict, List
-import numpy as np
+
 import MDAnalysis as mda
+import numpy as np
 from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis
 
-from ...schemas.analysis_bundle import ModuleResult, MetricSummary
+from ...schemas.analysis_bundle import MetricSummary, ModuleResult
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -22,7 +23,7 @@ __version__ = "2.0.0"
 def compute_hbonds(universe: mda.Universe, distance: float = 3.5, **kwargs) -> ModuleResult:
     """Compute hydrogen bonds over the trajectory."""
     start_time = time.time()
-    
+
     protein = universe.select_atoms("protein")
     if len(protein) == 0:
         raise ValueError("No protein atoms found for H-bond analysis")
@@ -101,7 +102,7 @@ def compute_hbonds(universe: mda.Universe, distance: float = 3.5, **kwargs) -> M
 
     mean_hb = float(np.mean(hbond_counts))
     std_hb = float(np.std(hbond_counts))
-    
+
     logger.info(
         "H-bond analysis complete: mean=%.1f, unique pairs=%d, persistent=%d",
         mean_hb, len(pair_counts), len(persistent),

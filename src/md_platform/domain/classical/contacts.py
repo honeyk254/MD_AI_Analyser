@@ -4,11 +4,12 @@ Computes the average inter-residue contact frequency and distance matrix
 from C-alpha atom positions across all trajectory frames.
 """
 
-import time
 import logging
+import time
 from typing import Any, Dict, List
-import numpy as np
+
 import MDAnalysis as mda
+import numpy as np
 from MDAnalysis.lib.distances import distance_array
 
 from ...schemas.analysis_bundle import ModuleResult

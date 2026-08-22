@@ -1,6 +1,10 @@
+import os
+import sys
+import time
+
 from fastapi.testclient import TestClient
+
 from md_platform.api.app import app
-import time, os, sys
 
 client = TestClient(app)
 

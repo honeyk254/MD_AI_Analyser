@@ -5,6 +5,7 @@ here.  Changes to these schemas are breaking changes and require a version
 bump + migration path.
 """
 
+from ..ml.schemas import MLAnalysisBundle
 from .analysis_bundle import (
     AnalysisBundle,
     MetricSummary,
@@ -14,14 +15,14 @@ from .analysis_bundle import (
     QCFlags,
     TrajectoryMetadata,
 )
-from .run_card import FileProvenance, RunCard, ToolVersions
 from .api import (
     AnalysisRequest,
-    RunStatus,
     ErrorResponse,
     ProgressUpdate,
+    RunStatus,
     UploadResponse,
 )
+from .run_card import FileProvenance, RunCard, ToolVersions
 
 __all__ = [
     # analysis_bundle
@@ -42,4 +43,5 @@ __all__ = [
     "ErrorResponse",
     "ProgressUpdate",
     "UploadResponse",
+    "MLAnalysisBundle",
 ]

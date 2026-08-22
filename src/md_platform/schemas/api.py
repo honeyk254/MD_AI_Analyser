@@ -7,7 +7,7 @@ for Phase 1, focusing purely on classical analysis.
 from enum import Enum
 from typing import Dict, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class RunStatus(str, Enum):
@@ -57,7 +57,7 @@ class AnalysisResponse(BaseModel):
 class AnalysisRequest(BaseModel):
     """Parameters controlling the analysis pipeline.
 
-    Cleaned up to exclude GNN/Transformer/MSM for Phase 1.
+    Classical analysis remains the default path; Phase 4 ML is opt-in.
     """
 
     job_id: str
@@ -77,6 +77,14 @@ class AnalysisRequest(BaseModel):
     salt_bridge_cutoff: float = Field(default=4.0, ge=2.0, le=8.0)
     temperature: float = Field(default=300.0, ge=200.0, le=500.0)
     fel_bins: int = Field(default=50, ge=10, le=200)
+
+    # Phase 4 opt-in
+    enable_ml: bool = False
+    ml_lag_frames: int = Field(default=5, ge=1)
+    ml_n_states: int = Field(default=3, ge=2, le=10)
+    ml_min_frames: int = Field(default=100, ge=2)
+    ml_min_transition_count: int = Field(default=10, ge=1)
+    ml_ck_threshold: float = Field(default=0.15, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
     def validate_frame_window(self) -> "AnalysisRequest":

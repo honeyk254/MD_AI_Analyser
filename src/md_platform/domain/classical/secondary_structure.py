@@ -5,13 +5,14 @@ the MDAnalysis Universe into an MDTraj trajectory and running simplified
 DSSP assignment.
 """
 
-import time
 import logging
-from typing import Any, Dict, List
-import numpy as np
-import MDAnalysis as mda
+import time
+from typing import List
 
-from ...schemas.analysis_bundle import ModuleResult, MetricSummary
+import MDAnalysis as mda
+import numpy as np
+
+from ...schemas.analysis_bundle import MetricSummary, ModuleResult
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -21,7 +22,7 @@ __version__ = "2.0.0"
 def compute_secondary_structure(universe: mda.Universe, **kwargs) -> ModuleResult:
     """Compute secondary structure per residue over time using MDTraj DSSP."""
     start_time = time.time()
-    
+
     import mdtraj as md
 
     protein = universe.select_atoms("protein")
@@ -79,7 +80,7 @@ def compute_secondary_structure(universe: mda.Universe, **kwargs) -> ModuleResul
             "E": int(np.sum(col == "E")),
             "C": int(np.sum(col == "C")),
         }
-        dominant_ss.append(max(counts, key=counts.get))
+        dominant_ss.append(max(counts, key=lambda k: counts[k]))
 
     mean_h = float(np.mean(helix_frac)) if helix_frac else 0.0
     mean_s = float(np.mean(sheet_frac)) if sheet_frac else 0.0

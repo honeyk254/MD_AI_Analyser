@@ -1,22 +1,21 @@
 """FastAPI application factory."""
 
+import logging
 import os
 import time
 from collections import defaultdict, deque
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Request
 from fastapi.responses import JSONResponse
-import logging
 
-from .routes import router, demo_router
+from .routes import demo_router, router
 
 logging.basicConfig(level=logging.INFO)
 
 MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(64 * 1024)))
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "30"))
-_request_buckets = defaultdict(deque)
+_request_buckets: defaultdict[str, deque[float]] = defaultdict(deque)
 
 
 def create_app() -> FastAPI:
@@ -26,7 +25,7 @@ def create_app() -> FastAPI:
         version="2.0.0",
         description="Phase 1: Structural Biology Analysis Infrastructure",
     )
-    
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -64,11 +63,11 @@ def create_app() -> FastAPI:
 
     app.include_router(router)
     app.include_router(demo_router)
-    
+
     @app.get("/health")
     async def health_check():
         return {"status": "ok", "version": "2.0.0"}
-        
+
     return app
 
 # For uvicorn: `uvicorn md_platform.api.app:app`

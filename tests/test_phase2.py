@@ -13,8 +13,8 @@ from md_platform.schemas.analysis_bundle import (
     QCFlags,
     TrajectoryMetadata,
 )
-from md_platform.schemas.run_card import FileProvenance, RunCard, ToolVersions
 from md_platform.schemas.api import RunStatus, StatusResponse
+from md_platform.schemas.run_card import FileProvenance, RunCard, ToolVersions
 
 
 def make_bundle() -> AnalysisBundle:

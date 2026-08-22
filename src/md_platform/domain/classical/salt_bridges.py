@@ -4,14 +4,15 @@ Identifies charged residue pairs forming salt bridges across the
 trajectory using distance-based criteria between canonical charge centres.
 """
 
-import time
 import logging
+import time
 from typing import Any, Dict, List
-import numpy as np
+
 import MDAnalysis as mda
+import numpy as np
 from MDAnalysis.lib.distances import distance_array
 
-from ...schemas.analysis_bundle import ModuleResult, MetricSummary
+from ...schemas.analysis_bundle import MetricSummary, ModuleResult
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -21,7 +22,7 @@ __version__ = "2.0.0"
 def compute_salt_bridges(universe: mda.Universe, cutoff: float = 4.0, **kwargs) -> ModuleResult:
     """Detect salt bridges between oppositely charged residues."""
     start_time = time.time()
-    
+
     pos_sel = universe.select_atoms(
         "(resname ARG and name CZ) or "
         "(resname LYS and name NZ) or "

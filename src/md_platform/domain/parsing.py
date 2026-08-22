@@ -5,9 +5,10 @@ to extract deterministic metadata without guessing.
 """
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-import numpy as np
+from typing import Optional
+
 import MDAnalysis as mda
+import numpy as np
 
 from ..schemas.analysis_bundle import TrajectoryMetadata
 
@@ -38,7 +39,7 @@ def parse_metadata(
     # Format detection
     topo_ext = Path(topology_file).suffix.lower() if topology_file else ""
     traj_ext = Path(trajectory_file).suffix.lower() if trajectory_file else ""
-    
+
     if topo_ext and traj_ext:
         original_format = f"{topo_ext}/{traj_ext}"
     elif topo_ext:
@@ -48,7 +49,7 @@ def parse_metadata(
 
     # Force field / water model extraction
     force_field = "unknown — not recoverable"
-    # Future enhancement: If topo_ext == ".tpr", we could shell out to `gmx dump` 
+    # Future enhancement: If topo_ext == ".tpr", we could shell out to `gmx dump`
     # to parse the FF exactly, but guessing from raw atoms is strictly forbidden.
 
     # Box dimensions (average over trajectory, if present)
@@ -60,7 +61,7 @@ def parse_metadata(
                 if ts.dimensions is not None:
                     # ts.dimensions is usually [A, B, C, alpha, beta, gamma]
                     boxes.append(ts.dimensions[:3])
-            
+
             if boxes:
                 avg_box = np.mean(boxes, axis=0)
                 box_dimensions = [float(x) for x in avg_box]

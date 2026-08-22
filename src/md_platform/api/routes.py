@@ -1,15 +1,17 @@
 """API Routes."""
 
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 import os
 import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from ..demo_inputs import ensure_demo_inputs
-from ..schemas.api import AnalysisRequest, AnalysisResponse, ReviewRequest, StatusResponse
-from ..schemas.analysis_bundle import AnalysisBundle
+from ..ml.schemas import MLAnalysisBundle
 from ..orchestrator import AnalysisOrchestrator
+from ..schemas.analysis_bundle import AnalysisBundle
+from ..schemas.api import AnalysisRequest, AnalysisResponse, ReviewRequest, StatusResponse
 from .dependencies import get_orchestrator
-from pathlib import Path
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 demo_router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
@@ -26,10 +28,10 @@ async def submit_analysis(
     """Submit a new analysis run."""
     if not request.run_id:
         request.run_id = request.job_id or str(uuid.uuid4())
-        
+
     # Launch in background
     background_tasks.add_task(orchestrator.run_analysis, request)
-    
+
     return AnalysisResponse(
         run_id=request.run_id,
         message="Analysis submitted successfully.",
@@ -94,12 +96,32 @@ async def get_results(
             status_code=400,
             detail=f"Results not available. Current status: {status.status}",
         )
-        
+
     bundle = orchestrator.bundles.get(run_id)
     if not bundle:
         raise HTTPException(status_code=404, detail="Bundle not found.")
-        
+
     return bundle
+
+
+@router.get("/{run_id}/ml-results", response_model=MLAnalysisBundle)
+async def get_ml_results(
+    run_id: str,
+    orchestrator: AnalysisOrchestrator = Depends(get_orchestrator),
+):
+    """Get the Phase 4 ML bundle for a completed run."""
+    status = orchestrator.get_status(run_id)
+    if status.status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Results not available. Current status: {status.status}",
+        )
+
+    ml_bundle = orchestrator.ml_bundles.get(run_id)
+    if not ml_bundle:
+        raise HTTPException(status_code=404, detail="ML bundle not found.")
+
+    return ml_bundle
 
 
 @router.post("/{run_id}/review", response_model=StatusResponse)
@@ -112,4 +134,4 @@ async def review_analysis(
     try:
         return orchestrator.approve_run(run_id, request.reviewer_signoff)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

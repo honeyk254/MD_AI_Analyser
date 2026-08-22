@@ -2,6 +2,7 @@
 
 from md_platform.schemas.analysis_bundle import TrajectoryMetadata
 
+
 def test_trajectory_metadata():
     """Test that TrajectoryMetadata validates correctly."""
     meta = TrajectoryMetadata(

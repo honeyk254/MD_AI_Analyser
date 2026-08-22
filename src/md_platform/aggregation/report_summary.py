@@ -4,12 +4,14 @@ This keeps the LLM on a short leash: the report context is pre-aggregated in
 pure Python and only exposes compact summaries, trends, and threshold checks.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, Optional
 
+from ..ml.schemas import MLAnalysisBundle
+from ..ml.summary import build_ml_summary
 from ..schemas.analysis_bundle import AnalysisBundle, ModuleResult
 
 
-def build_report_summary(bundle: AnalysisBundle) -> Dict[str, Any]:
+def build_report_summary(bundle: AnalysisBundle, ml_bundle: Optional[MLAnalysisBundle] = None) -> Dict[str, Any]:
     """Build the compact report context used by the LLM and HTML report."""
     return {
         "run_id": bundle.run_id,
@@ -19,6 +21,7 @@ def build_report_summary(bundle: AnalysisBundle) -> Dict[str, Any]:
             name: _module_summary(name, result) for name, result in bundle.modules.items()
         },
         "reference_ranges": _reference_ranges(bundle),
+        "ml": build_ml_summary(ml_bundle),
     }
 
 

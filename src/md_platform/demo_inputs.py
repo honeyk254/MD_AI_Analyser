@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
-
+from typing import Any, Dict, List, Tuple
 
 ResidueSpec = Tuple[str, List[Tuple[str, Tuple[float, float, float], str]]]
 
@@ -92,7 +91,7 @@ def ensure_demo_inputs(base_dir: Path) -> Dict[str, Dict[str, str]]:
     demo_dir = base_dir / "examples"
     demo_dir.mkdir(parents=True, exist_ok=True)
 
-    examples = {
+    examples: Dict[str, Dict[str, Any]] = {
         "stable": {
             "label": "Stable peptide",
             "amplitude": 0.12,
@@ -109,11 +108,11 @@ def ensure_demo_inputs(base_dir: Path) -> Dict[str, Dict[str, str]]:
         trajectory_path = demo_dir / f"{name}_trajectory.pdb"
         topology_path.write_text(_build_pdb(amplitude=0.0, n_models=1), encoding="utf-8")
         trajectory_path.write_text(
-            _build_pdb(amplitude=spec["amplitude"], n_models=12), encoding="utf-8"
+            _build_pdb(amplitude=float(spec["amplitude"]), n_models=12), encoding="utf-8"
         )
         created[name] = {
             "name": name,
-            "label": spec["label"],
+            "label": str(spec["label"]),
             "topology_file": str(topology_path),
             "trajectory_file": str(trajectory_path),
         }

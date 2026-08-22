@@ -4,13 +4,14 @@ Computes per-residue RMSF of C-alpha atoms to identify flexible and rigid
 regions, and groups highly flexible residues into contiguous segments.
 """
 
-import time
 import logging
-from typing import Any, Dict, List
-import numpy as np
-import MDAnalysis as mda
+import time
+from typing import Dict, List
 
-from ...schemas.analysis_bundle import ModuleResult, MetricSummary, PerResidueSeries
+import MDAnalysis as mda
+import numpy as np
+
+from ...schemas.analysis_bundle import MetricSummary, ModuleResult, PerResidueSeries
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -25,12 +26,12 @@ def collect_ca_positions(universe: mda.Universe, atoms: mda.AtomGroup, align: bo
     from MDAnalysis.analysis.align import alignto
     n_frames = len(universe.trajectory)
     positions = np.zeros((n_frames, len(atoms), 3))
-    
+
     if align:
         ref = universe.copy()
         ref.trajectory[0]
 
-    for i, ts in enumerate(universe.trajectory):
+    for i, _ts in enumerate(universe.trajectory):
         if align:
             alignto(universe, ref, select="protein and name CA")
         positions[i] = atoms.positions

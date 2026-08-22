@@ -1,7 +1,9 @@
 """Global Configuration."""
 
 import os
+
 from pydantic_settings import BaseSettings
+
 
 class Settings(BaseSettings):
     """Application settings."""
@@ -9,7 +11,7 @@ class Settings(BaseSettings):
     debug: bool = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
     output_dir: str = os.getenv("OUTPUT_DIR", "data/outputs")
     data_dir: str = os.getenv("DATA_DIR", "data/inputs")
-    
+
     class Config:
         env_file = ".env"
 

@@ -4,13 +4,14 @@ Collects individual module results and trajectory metadata to build the
 final, versioned AnalysisBundle.
 """
 
-from typing import Dict, Any
-from datetime import datetime, timezone
 import sys
+from datetime import datetime, timezone
+from typing import Any, Dict
+
 import MDAnalysis
 
-from ..schemas.analysis_bundle import AnalysisBundle, ModuleResult, TrajectoryMetadata, QCFlags, QCFlag
-from ..schemas.run_card import RunCard, ToolVersions, FileProvenance
+from ..schemas.analysis_bundle import AnalysisBundle, ModuleResult, QCFlag, QCFlags, TrajectoryMetadata
+from ..schemas.run_card import FileProvenance, RunCard, ToolVersions
 
 
 def build_bundle(
@@ -22,7 +23,7 @@ def build_bundle(
     parameters: Dict[str, Any],
 ) -> AnalysisBundle:
     """Build the final AnalysisBundle from all upstream components."""
-    
+
     # 1. Update QC flags based on module outputs
     # For example, check if RMSD found an equilibration point
     if "rmsd" in module_results and not module_results["rmsd"].error:
@@ -41,14 +42,14 @@ def build_bundle(
     # In a full implementation, `inputs` would contain file hashes
     import mdtraj
     import numpy
-    
+
     tool_versions = ToolVersions(
         python=sys.version.split()[0],
         mdanalysis=MDAnalysis.__version__,
         mdtraj=mdtraj.__version__,
         numpy=numpy.__version__,
     )
-    
+
     import os
     norm_inputs = {}
     for k, v in inputs.items():
@@ -68,7 +69,7 @@ def build_bundle(
         container_digest=None,
         parameters=parameters,
     )
-    
+
     # 3. Assemble
     bundle = AnalysisBundle(
         run_id=run_id,
@@ -78,5 +79,5 @@ def build_bundle(
         modules=module_results,
         run_card=run_card,
     )
-    
+
     return bundle

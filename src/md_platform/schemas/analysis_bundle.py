@@ -4,8 +4,9 @@ Every classical module writes its output to this shape. The LLM reporting layer
 only ever reads from this schema, never raw trajectories.
 """
 
-from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 from .run_card import RunCard
@@ -53,7 +54,7 @@ class ModuleResult(BaseModel):
     # Catch-all for module-specific complex data (e.g. PCA arrays, contact maps)
     # In a full implementation, we'd union these into specific schemas.
     data: Dict[str, Any] = Field(default_factory=dict)
-    
+
     error: Optional[str] = Field(None, description="Error message if the module failed.")
 
 
@@ -100,14 +101,14 @@ class AnalysisBundle(BaseModel):
 
     run_id: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    
+
     trajectory_metadata: TrajectoryMetadata
     qc_flags: QCFlags
-    
+
     modules: Dict[str, ModuleResult] = Field(
         description="Module outputs keyed by module name (e.g. 'rmsd')."
     )
-    
+
     run_card: RunCard = Field(
         description="Provenance and reproducibility metadata."
     )

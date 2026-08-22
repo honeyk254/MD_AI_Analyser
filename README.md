@@ -1,5 +1,7 @@
 # MD AI Platform
 
+[![CI](https://github.com/honeyk254/MD_AI_Analyser/actions/workflows/ci.yml/badge.svg)](https://github.com/honeyk254/MD_AI_Analyser/actions/workflows/ci.yml)
+
 An advanced, modular platform for molecular dynamics (MD) trajectory analysis. The platform combines **ground-truth deterministic physical calculations** with **grounded, anti-hallucination LLM narrative reporting** and **production-ready containerized deployment**.
 
 ---
@@ -29,7 +31,7 @@ An advanced, modular platform for molecular dynamics (MD) trajectory analysis. T
 
 ### 3. Production Deployment & Demo System
 * **Reverse-Proxy Architecture:** Production Docker Compose stack with Caddy proxying port `80` to private FastAPI instances.
-* **Built-in Security Guards:** Request payload size limits (100MB body guard) and IP-based rate limiting respecting `X-Forwarded-For`.
+* **Built-in Security Guards:** Request payload size limits (64 KB default, `MAX_REQUEST_BODY_BYTES`) and IP-based rate limiting respecting `X-Forwarded-For`.
 * **Bundled Zero-Setup Demos:** Includes pre-packaged synthetic peptide trajectories (`stable` and `flexible`) for instant testing.
 
 ---
@@ -137,20 +139,27 @@ curl http://localhost:8000/api/v1/analysis/{run_id}/results
 
 ## 🧪 Testing & Validation
 
-Run the automated test suite covering schemas, domain logic, LLM grounding, rate limiters, and API routes:
+The CI pipeline (GitHub Actions) runs lint (ruff), type-check (mypy), the full test suite, and a domain-layer coverage gate (≥80%).
 
 ```bash
 pip install -e .[dev]
-pytest tests/
+pytest tests/                                   # full suite
+pytest tests/test_regression.py -v              # numerical regression vs. reference trajectory
+pytest tests/ --cov=src/md_platform/domain --cov-fail-under=80
+ruff check src tests run_demo.py
+mypy src
 ```
+
+**Numerical regression suite** (`tests/test_regression.py`): runs all 8 classical modules against the adenylate-kinase DIMS reference trajectory (the MDAnalysis User Guide dataset, Beckstein et al. 2009) and asserts RMSD/Rg/SASA against published values (e.g. frame-0 Rg = 16.669 Å, endpoint backbone RMSD = 6.85 Å) plus ±10% drift bands. Pipeline runtime baseline on this trajectory: ~13 s (8 modules, 98 frames).
 
 ---
 
 ## 📋 Roadmap
 
 This project executes against the [Master Plan](md-ai-platform-master-plan.md):
-* ✅ **Phase 1:** Core Data Contracts & Classical MD Engine
-* ✅ **Phase 2:** Grounded LLM Reporting & Synthesis with Anti-Hallucination Verification
-* ✅ **Phase 3:** Containerized Deployment, Caddy Reverse Proxy, Middleware Guards & Demo Endpoints
+* ✅ **Phase 0:** Data contracts, provenance run-card, CI (lint + type-check + tests + coverage gate), reference trajectory with published ranges
+* ✅ **Phase 1:** Classical MD engine — 8 modules, numerical regression suite vs. literature ranges, domain coverage ≥80%
+* ✅ **Phase 2:** Grounded LLM reporting, anti-hallucination verifier (100% catch rate on injected-error fixtures), human review gate, report latency/cost/review-turnaround metrics logged
+* ✅ **Phase 3:** Containerized deployment, Caddy reverse proxy, middleware guards, demo endpoints
 * 🔄 **Phase 4:** Statistical & Machine Learning Layer (TICA, Markov State Models / MSM, and Free-Energy Landscapes)
 

@@ -5,13 +5,14 @@ and estimates the equilibration point using a rolling-standard-deviation
 heuristic.
 """
 
-import time
 import logging
-import numpy as np
+import time
+
 import MDAnalysis as mda
+import numpy as np
 from MDAnalysis.analysis.rms import RMSD as MDA_RMSD
 
-from ...schemas.analysis_bundle import ModuleResult, MetricSummary
+from ...schemas.analysis_bundle import MetricSummary, ModuleResult
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -24,7 +25,7 @@ def compute_rmsd(universe: mda.Universe, **kwargs) -> ModuleResult:
     Returns a structured ModuleResult containing the time series and scalar summaries.
     """
     start_time = time.time()
-    
+
     protein = universe.select_atoms("protein and backbone")
     if len(protein) == 0:
         logger.warning("No backbone atoms found; falling back to 'all' selection")

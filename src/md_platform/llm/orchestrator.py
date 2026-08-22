@@ -3,9 +3,9 @@
 Manages tool-calling to the LLM (Anthropic) for narrative generation.
 """
 
-import os
 import logging
-from typing import Any, Dict, List
+import os
+from typing import Any, Dict, List, Optional
 
 try:
     import anthropic
@@ -13,23 +13,24 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency in local d
     anthropic = None
 
 from ..aggregation.report_summary import build_report_summary
+from ..ml.schemas import MLAnalysisBundle
 from ..schemas.analysis_bundle import AnalysisBundle
-from .grounding_checker import check_grounding, GroundingError
+from .grounding_checker import check_grounding
 
 logger = logging.getLogger("md_ai_analyzer.llm.orchestrator")
 
 
 class LLMOrchestrator:
     """Orchestrates LLM calls to generate a scientific report."""
-    
-    def __init__(self, api_key: str = None):
+
+    def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not self.api_key:
             logger.warning("ANTHROPIC_API_KEY not found. LLM features will be disabled or mocked.")
-        
+
         # In a real app we instantiate the client here:
         # self.client = anthropic.Anthropic(api_key=self.api_key)
-        
+
     def _get_metric_summary(self, bundle: AnalysisBundle, metric_name: str) -> str:
         """Tool implementation: get_metric_summary."""
         aliases = {
@@ -79,19 +80,23 @@ class LLMOrchestrator:
             "sasa": "Should plateau during equilibrium.",
         }
         ref = ranges.get(metric_name, "No literature reference range available.")
-        
+
         # Fetch actual value to compare
         actual = self._get_metric_summary(bundle, metric_name)
-        
+
         return f"Reference: {ref}\nActual: {actual}"
 
-    def generate_report(self, bundle: AnalysisBundle) -> str:
+    def generate_report(
+        self,
+        bundle: AnalysisBundle,
+        ml_bundle: Optional[MLAnalysisBundle] = None,
+    ) -> str:
         """Generate a narrative report using the LLM and verify its grounding."""
-        summary = build_report_summary(bundle)
+        summary = build_report_summary(bundle, ml_bundle)
 
         if not self.api_key:
             draft_report = self._render_fallback_report(summary)
-            ungrounded_claims = check_grounding(draft_report, bundle)
+            ungrounded_claims = check_grounding(draft_report, bundle, ml_bundle)
             if ungrounded_claims:
                 logger.warning("Ungrounded claims found: %s", ungrounded_claims)
                 draft_report += (
@@ -103,7 +108,7 @@ class LLMOrchestrator:
         if anthropic is None:
             logger.warning("anthropic package not installed; using fallback report generation.")
             draft_report = self._render_fallback_report(summary)
-            ungrounded_claims = check_grounding(draft_report, bundle)
+            ungrounded_claims = check_grounding(draft_report, bundle, ml_bundle)
             if ungrounded_claims:
                 logger.warning("Ungrounded claims found: %s", ungrounded_claims)
                 draft_report += (
@@ -116,9 +121,9 @@ class LLMOrchestrator:
             "You are a structural biology expert analyzing MD trajectories. "
             "Write a concise scientific report using only the figures returned by the tools. "
             "Do not invent numbers. Structure the output as QC Assessment, Structural Stability, "
-            "Biological Interpretation, Limitations, and Follow-ups."
+            "Biological Interpretation, Limitations, Follow-ups, and an optional Phase 4 ML section if present."
         )
-        
+
         tools = [
             {
                 "name": "get_metric_summary",
@@ -151,9 +156,13 @@ class LLMOrchestrator:
                 }
             }
         ]
-        
+
         client = anthropic.Anthropic(api_key=self.api_key)
-        
+
+        # Plan metric (tracked, not gated): cost per report, target < $0.50.
+        tokens_in = 0
+        tokens_out = 0
+
         try:
             messages: List[Dict[str, Any]] = [
                 {
@@ -173,6 +182,10 @@ class LLMOrchestrator:
             )
 
             for _ in range(4):
+                usage = getattr(response, "usage", None)
+                if usage:
+                    tokens_in += usage.input_tokens
+                    tokens_out += usage.output_tokens
                 if response.stop_reason != "tool_use":
                     break
 
@@ -210,16 +223,27 @@ class LLMOrchestrator:
                     messages=messages,
                 )
 
+            usage = getattr(response, "usage", None)
+            if usage:
+                tokens_in += usage.input_tokens
+                tokens_out += usage.output_tokens
             draft_report = response.content[0].text if response.content else ""
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
             draft_report = self._render_fallback_report(summary)
 
-        ungrounded_claims = check_grounding(draft_report, bundle)
+        # Claude 3 Haiku list price: $0.25/M input, $1.25/M output tokens.
+        cost_usd = (tokens_in * 0.25 + tokens_out * 1.25) / 1_000_000
+        logger.info(
+            "LLM report cost $%.4f (%d in / %d out tokens, target <$0.50)",
+            cost_usd, tokens_in, tokens_out,
+        )
+
+        ungrounded_claims = check_grounding(draft_report, bundle, ml_bundle)
         if ungrounded_claims:
             logger.warning(f"Ungrounded claims found: {ungrounded_claims}")
             draft_report += f"\n\n[QC WARNING] The following numbers failed the grounding check: {', '.join(ungrounded_claims)}"
-        
+
         return draft_report
 
     def _render_fallback_report(self, summary: Dict[str, Any]) -> str:
@@ -256,6 +280,32 @@ class LLMOrchestrator:
                 "",
                 "## Biological Interpretation",
                 "- The report is intentionally conservative and only summarizes computed metrics.",
+            ]
+        )
+
+        ml = summary.get("ml")
+        if ml:
+            lines.extend(
+                [
+                    "",
+                    "## Statistical / ML Layer",
+                    f"- Status: {ml['status']}",
+                    f"- ML gate passed: {ml['gating']['passed']}",
+                ]
+            )
+            if ml.get("msm"):
+                msm = ml["msm"]
+                lines.append(
+                    f"- MSM lag {msm['lag_frames']} frames ({msm['lag_ps']:.2f} ps); CK deviation {msm['ck_deviation']:.3f}."
+                )
+            if ml.get("baseline_comparison"):
+                baseline = ml["baseline_comparison"]
+                lines.append(
+                    f"- PCA/TICA state agreement: {baseline['state_agreement_nmi']:.2f} NMI."
+                )
+
+        lines.extend(
+            [
                 "",
                 "## Limitations",
                 "- No free-form claims beyond the aggregated bundle.",

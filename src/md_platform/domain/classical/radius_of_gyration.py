@@ -4,12 +4,13 @@ Measures protein compactness over time by tracking the radius of gyration
 across all trajectory frames.
 """
 
-import time
 import logging
-import numpy as np
-import MDAnalysis as mda
+import time
 
-from ...schemas.analysis_bundle import ModuleResult, MetricSummary
+import MDAnalysis as mda
+import numpy as np
+
+from ...schemas.analysis_bundle import MetricSummary, ModuleResult
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -23,7 +24,7 @@ def compute_rg(universe: mda.Universe, **kwargs) -> ModuleResult:
     protein = universe.select_atoms("protein")
     if len(protein) == 0:
         protein = universe.select_atoms("all")
-        
+
     n_frames = len(universe.trajectory)
     logger.info(
         "Computing radius of gyration for %d atoms over %d frames",

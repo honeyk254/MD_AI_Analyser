@@ -3,12 +3,13 @@
 Tracks protein surface exposure over time using MDTraj's Shrake--Rupley algorithm.
 """
 
-import time
 import logging
-import numpy as np
-import MDAnalysis as mda
+import time
 
-from ...schemas.analysis_bundle import ModuleResult, MetricSummary, PerResidueSeries
+import MDAnalysis as mda
+import numpy as np
+
+from ...schemas.analysis_bundle import MetricSummary, ModuleResult, PerResidueSeries
 
 logger = logging.getLogger("md_ai_analyzer")
 
@@ -18,7 +19,7 @@ __version__ = "2.0.0"
 def compute_sasa(universe: mda.Universe, **kwargs) -> ModuleResult:
     """Compute SASA over the trajectory using MDTraj Shrake--Rupley."""
     start_time = time.time()
-    
+
     import mdtraj as md
 
     protein = universe.select_atoms("protein")

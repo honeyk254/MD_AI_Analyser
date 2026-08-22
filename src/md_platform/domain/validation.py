@@ -5,7 +5,7 @@ Rejects invalid inputs early and generates initial QC flags.
 
 import MDAnalysis as mda
 
-from ..schemas.analysis_bundle import QCFlags, QCFlag, TrajectoryMetadata
+from ..schemas.analysis_bundle import QCFlag, QCFlags, TrajectoryMetadata
 
 
 def validate_trajectory(
@@ -14,12 +14,12 @@ def validate_trajectory(
     min_frames: int = 10,
 ) -> QCFlags:
     """Run basic sanity checks on the trajectory.
-    
+
     Raises ValueError if the trajectory is fundamentally unprocessable.
     Returns QCFlags for non-fatal issues.
     """
     flags = []
-    
+
     # 1. Frame count check
     sufficient_frames = metadata.n_frames_analyzed >= min_frames
     if not sufficient_frames:

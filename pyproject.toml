@@ -27,12 +27,26 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21.0",
-    "black>=23.0",
-    "isort>=5.12.0",
-    "flake8>=6.0"
+    "pytest-cov>=4.0",
+    "MDAnalysisTests>=2.6.0",
+    "ruff>=0.4",
+    "mypy>=1.8"
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+ignore = ["B008"] # FastAPI Depends() in parameter defaults is idiomatic
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
