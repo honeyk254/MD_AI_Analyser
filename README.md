@@ -156,6 +156,8 @@ mypy src
 
 ## 📋 Roadmap
 
+Live demo report: **https://honeyk254.github.io/MD_AI_Analyser/** (reference-system report with all 8 analyses, generated end-to-end by the pipeline through the grounding check and human review gate).
+
 This project executes against the [Master Plan](md-ai-platform-master-plan.md):
 * ✅ **Phase 0:** Data contracts, provenance run-card, CI (lint + type-check + tests + coverage gate), reference trajectory with published ranges
 * ✅ **Phase 1:** Classical MD engine — 8 modules, numerical regression suite vs. literature ranges, domain coverage ≥80%
