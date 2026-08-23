@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MD AI Platform</title>
+<style>
+:root {
+  --black: #000000; --white: #FFFFFF; --paper-beige: #F5F5DC;
+  --accent-teal: #00C2CB; --accent-magenta: #FF00FF; --accent-yellow: #FFD700;
+  --radius-1: 12px; --radius-2: 24px;
+  --shadow-1: 4px 4px 0px var(--black);
+  --shadow-2: 12px 12px 0px var(--black);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  background: var(--paper-beige); color: var(--black);
+  font-size: 18px; line-height: 1.6;
+}
+.container { max-width: 1100px; margin: 0 auto; padding: 48px 24px 96px; }
+h1 {
+  font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 96px; font-weight: 900; text-transform: uppercase;
+  letter-spacing: -2px; line-height: 1.0;
+}
+.title-bar { display: block; width: 96px; height: 12px; background: var(--accent-yellow); margin: 24px 0; }
+.lede { max-width: 720px; font-size: 18px; margin-bottom: 24px; }
+.badges { margin: 24px 0 32px; }
+.badge {
+  display: inline-block; padding: 4px 12px; margin: 0 8px 8px 0;
+  border: 3px solid var(--black); border-radius: var(--radius-1);
+  font-family: 'Arial Black', Arial, sans-serif; font-size: 14px;
+  font-weight: 900; text-transform: uppercase;
+}
+.badge-teal { background: var(--accent-teal); }
+.badge-yellow { background: var(--accent-yellow); }
+.badge-magenta { background: var(--accent-magenta); }
+.cta-row { display: flex; flex-wrap: wrap; gap: 24px; margin: 32px 0 48px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 12px 32px;
+  font-family: 'Arial Black', Arial, sans-serif; font-size: 18px;
+  font-weight: 900; text-transform: uppercase; text-decoration: none;
+  border: 3px solid var(--black); border-radius: var(--radius-1);
+  box-shadow: var(--shadow-1); transition: transform .05s;
+}
+.btn:hover { box-shadow: var(--shadow-2); transform: translate(-2px, -2px); }
+.btn:active { box-shadow: none; transform: translate(4px, 4px); }
+.btn:focus-visible { outline: 4px solid var(--black); outline-offset: 3px; }
+.btn-primary { background: var(--accent-teal); color: var(--black); }
+.btn-secondary { background: var(--white); color: var(--black); }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin: 32px 0; }
+.card {
+  background: var(--white); border: 3px solid var(--black);
+  border-radius: var(--radius-1); box-shadow: var(--shadow-1);
+  padding: 24px;
+}
+.card h2 {
+  font-family: 'Arial Black', Arial, sans-serif; font-size: 32px;
+  text-transform: uppercase; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 12px;
+}
+.card h2::before { content: ''; width: 16px; height: 32px; background: var(--accent-teal); flex: none; }
+.card:nth-child(2) h2::before { background: var(--accent-yellow); }
+.card:nth-child(3) h2::before { background: var(--accent-magenta); }
+.card p { font-size: 18px; }
+footer {
+  margin-top: 64px; padding-top: 24px; border-top: 3px solid var(--black);
+  font-size: 14px; font-weight: bold; text-transform: uppercase;
+}
+footer a { color: var(--black); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>MD AI<br>Platform</h1>
+  <span class="title-bar"></span>
+  <p class="lede">Structural-biology analysis infrastructure: deterministic MD calculations, an <strong>opt-in kinetic layer</strong> (TICA/MSM with Chapman-Kolmogorov validation and a VAMPnet ablation), and a <strong>grounded, anti-hallucination LLM narrative layer</strong> &mdash; every number in every report is verified against the computed AnalysisBundle.</p>
+  <div class="badges">
+    <span class="badge badge-teal">10 analyses</span>
+    <span class="badge badge-teal">TICA + MSM + VAMPnet</span>
+    <span class="badge badge-yellow">Grounded</span>
+    <span class="badge badge-magenta">CI Green</span>
+  </div>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="adk-report.html">Reference report (10 modules)</a>
+    <a class="btn btn-secondary" href="kinetics-report.html">Kinetics report (full ML layer)</a>
+    <a class="btn btn-secondary" href="demo-report.html">Demo trajectory report</a>
+  </div>
+  <div class="card-grid">
+    <div class="card">
+      <h2>Deterministic</h2>
+      <p>RMSD, RMSF, Rg, SASA, H-bonds, contact maps, secondary structure, salt bridges. Exact math, never replaced by ML.</p>
+    </div>
+    <div class="card">
+      <h2>Grounded</h2>
+      <p>A deterministic checker verifies every numeric claim against the bundle. 100% catch rate on injected-error fixtures.</p>
+    </div>
+    <div class="card">
+      <h2>Kinetically gated</h2>
+      <p>TICA + MSM run only behind minimum-data gates and CK validation; a VAMPnet ablation is reported against the baseline as specific numbers (synthetic kinetics demo: 6.4 vs 6.0 ps leading timescales).</p>
+    </div>
+    <div class="card">
+      <h2>Verified</h2>
+      <p>Numerical regression against published reference values runs in CI on every commit, with an 80% coverage gate.</p>
+    </div>
+  </div>
+  <footer>Source: github.com/honeyk254/MD_AI_Analyser &middot; Reports are static snapshots of real pipeline runs through the human review gate.</footer>
+</div>
+</body>
+</html>
