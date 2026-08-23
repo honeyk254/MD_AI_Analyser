@@ -364,9 +364,9 @@ def _build_msm(
     direct_row_sums[direct_row_sums == 0] = 1.0
     direct_transition = direct_counts / direct_row_sums
     predicted_transition = np.linalg.matrix_power(transition_matrix, ck_steps)
-    ck_deviation = float(
-        np.linalg.norm(predicted_transition - direct_transition, ord="fro")
-        / max(np.linalg.norm(direct_transition, ord="fro"), 1e-12)
+    # float() keeps the norms concrete across numpy stub versions (2.4 vs 2.5)
+    ck_deviation = float(np.linalg.norm(predicted_transition - direct_transition, ord="fro")) / max(
+        float(np.linalg.norm(direct_transition, ord="fro")), 1e-12
     )
     is_markovian = ck_deviation <= ck_threshold
 
