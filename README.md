@@ -163,5 +163,6 @@ This project executes against the [Master Plan](md-ai-platform-master-plan.md):
 * ✅ **Phase 1:** Classical MD engine — 8 modules, numerical regression suite vs. literature ranges, domain coverage ≥80%
 * ✅ **Phase 2:** Grounded LLM reporting, anti-hallucination verifier (100% catch rate on injected-error fixtures), human review gate, report latency/cost/review-turnaround metrics logged
 * ✅ **Phase 3:** Containerized deployment, Caddy reverse proxy, middleware guards, demo endpoints
-* 🔄 **Phase 4:** Statistical & Machine Learning Layer (TICA, Markov State Models / MSM, and Free-Energy Landscapes)
+* ✅ **Phase 4:** Statistical & Machine Learning Layer — opt-in TICA/MSM with minimum-frames/transition-count gating, Chapman-Kolmogorov validation before `is_markovian` is reported, and a mandatory PCA-vs-TICA baseline comparison
+* ✅ **Phase 5:** Testing rigor + Analysis Cards — `AnalysisBundle` contract tests (producer/consumer + JSON round-trip), formalized LLM eval harness (4 known-correct + 5 injected-error fixtures, scored rubric at 100%), and Analysis Cards ([ANALYSIS_CARDS.md](ANALYSIS_CARDS.md), machine-readable card required on every ML bundle)
 

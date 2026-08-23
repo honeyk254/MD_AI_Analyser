@@ -23,5 +23,5 @@ jobs:
       run: ruff check src tests run_demo.py
     - name: Type-check
       run: mypy src
-    - name: Test (regression suite + domain coverage gate)
+    - name: Test (regression + contract + LLM-eval suites, coverage gate)
       run: pytest tests/ --cov=src/md_platform/domain --cov-fail-under=80

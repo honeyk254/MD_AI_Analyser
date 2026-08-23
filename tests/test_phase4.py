@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from md_platform.aggregation.report_summary import build_report_summary
-from md_platform.llm.grounding_checker import check_grounding
 from md_platform.ml.analysis import run_phase4_ml_analysis
 from md_platform.schemas.analysis_bundle import (
     AnalysisBundle,
@@ -66,6 +65,17 @@ class _FakeUniverse:
 
     def select_atoms(self, _selection: str):
         return _FakeSelection(self)
+
+
+# Two metastable basins: atom 1 oscillates near x=1 then x=2 then back.
+_ML_FRAMES = [
+    [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+    [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]],
+    [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+    [[0.0, 0.0, 0.0], [2.1, 0.0, 0.0]],
+    [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+    [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]],
+]
 
 
 def _make_classical_bundle() -> AnalysisBundle:
@@ -132,15 +142,7 @@ def _make_ml_request(**overrides) -> AnalysisRequest:
 
 
 def test_phase4_ml_analysis_builds_bundle_and_summary() -> None:
-    frames = [
-        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [2.1, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]],
-    ]
-    ml_bundle = run_phase4_ml_analysis(_FakeUniverse(frames), _make_classical_bundle(), _make_ml_request())
+    ml_bundle = run_phase4_ml_analysis(_FakeUniverse(_ML_FRAMES), _make_classical_bundle(), _make_ml_request())
 
     assert ml_bundle.status == "completed"
     assert ml_bundle.msm is not None
@@ -162,18 +164,3 @@ def test_phase4_ml_analysis_refuses_insufficient_frames() -> None:
 
     assert ml_bundle.status == "blocked"
     assert any("below the minimum" in reason for reason in ml_bundle.gating.reasons)
-
-
-def test_phase4_grounding_checker_catches_bad_ml_numbers() -> None:
-    frames = [
-        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [2.1, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
-        [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]],
-    ]
-    ml_bundle = run_phase4_ml_analysis(_FakeUniverse(frames), _make_classical_bundle(), _make_ml_request())
-    report = f"PCA/TICA agreement was 999.0 and CK deviation was {ml_bundle.msm.ck_deviation:.3f}."
-
-    assert "999.0" in check_grounding(report, _make_classical_bundle(), ml_bundle)

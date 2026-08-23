@@ -423,10 +423,10 @@ Use this when scope pressure hits and something has to give.
 
 ## Part 6 — Quick-reference checklist
 
-- [ ] Phase 0: `AnalysisBundle` schema, reference trajectories, repo skeleton, CI lint/type-check
-- [ ] Phase 1: 6–10 classical modules, regression tests green, basic report
-- [ ] Phase 2: aggregation job, 3-tool orchestrator, grounding checker, human review gate
-- [ ] Phase 3: single-host deploy, pre-loaded demo trajectories
-- [ ] Phase 4: TICA+MSM with baseline comparison, minimum-data gating, CK validation
-- [ ] Phase 5: contract tests, formal LLM eval harness, Analysis Cards
+- [x] Phase 0: `AnalysisBundle` schema, reference trajectories, repo skeleton, CI lint/type-check
+- [x] Phase 1: 6–10 classical modules, regression tests green, basic report
+- [x] Phase 2: aggregation job, 3-tool orchestrator, grounding checker, human review gate
+- [x] Phase 3: single-host deploy, pre-loaded demo trajectories
+- [x] Phase 4: TICA+MSM with baseline comparison, minimum-data gating, CK validation
+- [x] Phase 5: contract tests, formal LLM eval harness, Analysis Cards
 - [ ] Phase 6 (optional): VAMPnets ablation, full AWS, tracing/cost dashboard, remaining modules
