@@ -71,6 +71,8 @@ def generate_all_plots(bundle: AnalysisBundle, ml_bundle: Optional[MLAnalysisBun
         ("contact_map", _plot_contact_map, bundle.modules.get("contacts")),
         ("ss_plot", _plot_secondary_structure, bundle.modules.get("secondary_structure")),
         ("salt_bridges_plot", _plot_salt_bridges, bundle.modules.get("salt_bridges")),
+        ("dihedrals_plot", _plot_dihedrals, bundle.modules.get("dihedrals")),
+        ("com_plot", _plot_com, bundle.modules.get("com")),
     ]
 
     for name, func, module_res in generators:
@@ -369,3 +371,36 @@ def _plot_msm_timescales(ml_bundle: MLAnalysisBundle) -> Optional[go.Figure]:
         line_color=BLACK,
     )
     return apply_theme(fig, "MSM implied timescales", "Mode", "Timescale (ps)")
+
+
+def _plot_dihedrals(res: ModuleResult) -> Optional[go.Figure]:
+    phi = res.residue_metrics.get("phi_circular_std")
+    psi = res.residue_metrics.get("psi_circular_std")
+    if not phi or not psi:
+        return None
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=phi.resids, y=phi.values, name="phi",
+        marker_color=ACCENT_TEAL, marker_line_color=BLACK, marker_line_width=1,
+    ))
+    fig.add_trace(go.Bar(
+        x=psi.resids, y=psi.values, name="psi",
+        marker_color=ACCENT_YELLOW, marker_line_color=BLACK, marker_line_width=1,
+    ))
+    fig.update_layout(barmode="group")
+    return apply_theme(fig, "Backbone Dihedral Flexibility (Circular Std)", "Residue", "Degrees")
+
+
+def _plot_com(res: ModuleResult) -> Optional[go.Figure]:
+    metric = res.scalar_metrics.get("com_drift")
+    if not metric or not metric.time_series or "time_ps" not in res.data:
+        return None
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=res.data["time_ps"], y=metric.time_series,
+        mode="lines", name="COM drift",
+        line=dict(color=ACCENT_MAGENTA, width=3),
+    ))
+    return apply_theme(fig, "Center-of-Mass Drift", "Time (ps)", "Drift (Angstrom)")

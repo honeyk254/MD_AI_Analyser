@@ -36,6 +36,8 @@ def generate_html_report(
         "contact_map": "Contact Map",
         "sasa_plot": "Solvent Accessible Surface Area",
         "salt_bridges_plot": "Salt Bridges",
+        "dihedrals_plot": "Backbone Dihedral Flexibility",
+        "com_plot": "Center-of-Mass Drift",
         "ml_comparison_plot": "PCA vs TICA Comparison",
         "tica_plot": "TICA Embedding",
         "msm_timescales_plot": "MSM Implied Timescales",
