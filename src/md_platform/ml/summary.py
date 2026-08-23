@@ -39,6 +39,7 @@ def build_ml_summary(ml_bundle: Optional[MLAnalysisBundle]) -> Optional[Dict[str
         "tica": _embedding_summary(ml_bundle.tica),
         "msm": _msm_summary(ml_bundle.msm),
         "baseline_comparison": _baseline_summary(ml_bundle.baseline_comparison),
+        "vampnet_ablation": _vampnet_summary(ml_bundle.vampnet_ablation),
         "analysis_card": {
             "title": ml_bundle.analysis_card.title,
             "purpose": ml_bundle.analysis_card.purpose,
@@ -89,6 +90,20 @@ def _baseline_summary(comparison: Optional[Any]) -> Optional[Dict[str, Any]]:
         "state_agreement_nmi": comparison.state_agreement_nmi,
         "timescale_relative_error": comparison.timescale_relative_error,
         "summary": comparison.summary,
+    }
+
+
+def _vampnet_summary(ablation: Optional[Any]) -> Optional[Dict[str, Any]]:
+    if ablation is None:
+        return None
+    return {
+        "available": ablation.available,
+        "vamp2_score": ablation.vamp2_score,
+        "leading_timescale_ps": ablation.leading_timescale_ps,
+        "tica_leading_timescale_ps": ablation.tica_leading_timescale_ps,
+        "timescale_relative_error": ablation.timescale_relative_error,
+        "state_agreement_nmi": ablation.state_agreement_nmi,
+        "summary": ablation.summary,
     }
 
 

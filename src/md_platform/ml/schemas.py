@@ -85,6 +85,25 @@ class AnalysisCard(BaseModel):
     version: str = "phase4-v1"
 
 
+class VAMPNetAblation(BaseModel):
+    """Phase 6 stretch: VAMPnet ablated against the TICA/MSM baseline.
+
+    The plan metric is the implied-timescale agreement between the learned
+    nonlinear embedding and the linear TICA baseline, reported as specific
+    numbers rather than a qualitative claim.
+    """
+
+    available: bool
+    vamp2_score: Optional[float] = None
+    leading_timescale_ps: Optional[float] = None
+    tica_leading_timescale_ps: Optional[float] = None
+    timescale_relative_error: Optional[float] = None
+    state_agreement_nmi: Optional[float] = None
+    n_states: int
+    epochs: int = 0
+    summary: str
+
+
 class MLAnalysisBundle(BaseModel):
     """Phase 4 outputs kept separate from the classical AnalysisBundle."""
 
@@ -98,6 +117,7 @@ class MLAnalysisBundle(BaseModel):
     tica: Optional[KineticEmbedding] = None
     msm: Optional[MSMSummary] = None
     baseline_comparison: Optional[BaselineComparison] = None
+    vampnet_ablation: Optional[VAMPNetAblation] = None
     analysis_card: AnalysisCard
     refusal_reason: Optional[str] = None
     notes: List[str] = Field(default_factory=list)

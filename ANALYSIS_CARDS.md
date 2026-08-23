@@ -43,6 +43,12 @@ side-by-side — no MSM report is produced without its classical baseline.
   configured cutoff decides `is_markovian`.
 - **PCA baseline** — same clustering on PCA components; exists solely as the
   comparison baseline, never reported alone.
+- **VAMPnet ablation** (Phase 6) — a small lobet-style network trained with
+  the differentiable VAMP-2 score (Wu & Noé 2017); torch is an optional
+  dependency (`pip install md-ai-platform[vampnets]`). Without torch the
+  ablation reports `available=false` and the rest of the ML layer is
+  unaffected. Reported numbers: leading implied timescale vs the TICA/MSM
+  baseline, timescale relative error, and state-agreement NMI.
 
 Implementation: `src/md_platform/ml/analysis.py` (opt-in via
 `enable_ml`, hand-rolled NumPy — no external MSM dependency).

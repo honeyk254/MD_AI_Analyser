@@ -13,7 +13,9 @@ from typing import Dict
 import MDAnalysis as mda
 
 from .aggregation.bundle_builder import build_bundle
+from .domain.classical.com import compute_com
 from .domain.classical.contacts import compute_contact_map
+from .domain.classical.dihedrals import compute_dihedrals
 from .domain.classical.hbonds import compute_hbonds
 from .domain.classical.radius_of_gyration import compute_rg
 from .domain.classical.rmsd import compute_rmsd
@@ -93,6 +95,8 @@ class AnalysisOrchestrator:
                 ("contacts", compute_contact_map),
                 ("secondary_structure", compute_secondary_structure),
                 ("salt_bridges", compute_salt_bridges),
+                ("dihedrals", compute_dihedrals),
+                ("com", compute_com),
             ]
 
             for mod_name, mod_func in modules:

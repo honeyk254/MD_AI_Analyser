@@ -13,7 +13,9 @@ import MDAnalysis as mda
 import pytest
 from MDAnalysisTests.datafiles import DCD, PSF
 
+from md_platform.domain.classical.com import compute_com
 from md_platform.domain.classical.contacts import compute_contact_map
+from md_platform.domain.classical.dihedrals import compute_dihedrals
 from md_platform.domain.classical.hbonds import compute_hbonds
 from md_platform.domain.classical.radius_of_gyration import compute_rg
 from md_platform.domain.classical.rmsd import compute_rmsd
@@ -35,6 +37,8 @@ MODULES = [
     ("contacts", compute_contact_map),
     ("secondary_structure", compute_secondary_structure),
     ("salt_bridges", compute_salt_bridges),
+    ("dihedrals", compute_dihedrals),
+    ("com", compute_com),
 ]
 
 
@@ -114,6 +118,15 @@ def test_remaining_modules_sane(reference_run):
 
     salt = modules["salt_bridges"].scalar_metrics["salt_bridge_count"]
     assert salt.mean >= 0
+
+    dihedrals = modules["dihedrals"].residue_metrics
+    assert len(dihedrals["phi_circular_std"].values) == dihedrals["phi_circular_std"].resids[-1]
+    flex = modules["dihedrals"].scalar_metrics["mean_backbone_circular_std"]
+    assert 0.0 < flex.mean < 180.0  # circular std of a torsion is bounded by (0, 180]
+
+    com = modules["com"].scalar_metrics["com_drift"]
+    assert com.min == pytest.approx(0.0)  # drift is measured from frame 0
+    assert com.max >= com.mean >= 0
 
 
 def test_pipeline_runtime_recorded(reference_run):

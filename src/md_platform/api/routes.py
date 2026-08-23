@@ -2,12 +2,15 @@
 
 import os
 import uuid
+from html import escape
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 
 from ..demo_inputs import ensure_demo_inputs
 from ..ml.schemas import MLAnalysisBundle
+from ..observability import LLM_METRICS, recent_spans
 from ..orchestrator import AnalysisOrchestrator
 from ..schemas.analysis_bundle import AnalysisBundle
 from ..schemas.api import AnalysisRequest, AnalysisResponse, ReviewRequest, StatusResponse
@@ -15,6 +18,7 @@ from .dependencies import get_orchestrator
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 demo_router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
+metrics_router = APIRouter(prefix="/api/v1/metrics", tags=["metrics"])
 
 DEMO_INPUTS = ensure_demo_inputs(Path(os.getenv("DATA_DIR", "data/inputs")))
 
@@ -135,3 +139,60 @@ async def review_analysis(
         return orchestrator.approve_run(run_id, request.reviewer_signoff)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@metrics_router.get("/llm")
+async def llm_metrics():
+    """LLM cost/latency aggregates and recent calls (plan: cost < $0.50/report)."""
+    summary = LLM_METRICS.summary()
+    return {
+        "summary": summary,
+        "recent_calls": [
+            {
+                "run_id": call.run_id,
+                "mode": call.mode,
+                "latency_s": round(call.latency_s, 3),
+                "cost_usd": round(call.cost_usd, 6),
+                "tokens_in": call.tokens_in,
+                "tokens_out": call.tokens_out,
+                "ungrounded_claims": call.ungrounded_claims,
+            }
+            for call in LLM_METRICS.calls[-20:]
+        ],
+        "recent_spans": recent_spans(10),
+    }
+
+
+@metrics_router.get("/dashboard", response_class=HTMLResponse)
+async def metrics_dashboard():
+    """Static cost/latency dashboard over the metrics collected above."""
+    summary = LLM_METRICS.summary()
+    rows = "".join(
+        f"<tr><td>{escape(call.run_id)}</td><td>{escape(call.mode)}</td>"
+        f"<td>{call.latency_s:.2f}s</td><td>${call.cost_usd:.4f}</td>"
+        f"<td>{call.ungrounded_claims}</td></tr>"
+        for call in reversed(LLM_METRICS.calls[-20:])
+    )
+    n = summary.get("n_reports", 0)
+    mean_cost = summary.get("mean_cost_usd", 0.0)
+    mean_latency = summary.get("mean_latency_s", 0.0)
+    return f"""<!doctype html>
+<html><head><title>MD AI Platform — LLM Metrics</title>
+<style>
+body {{ font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }}
+table {{ border-collapse: collapse; margin-top: 1rem; }}
+th, td {{ border: 1px solid #444; padding: 0.4rem 0.8rem; text-align: left; }}
+.cards span {{ display: inline-block; background: #222; border: 1px solid #555;
+border-radius: 6px; padding: 0.6rem 1.2rem; margin-right: 1rem; }}
+</style></head><body>
+<h1>LLM Cost / Latency Dashboard</h1>
+<div class="cards">
+<span><b>{n}</b> reports</span>
+<span>mean cost <b>${mean_cost:.4f}</b> (target &lt; $0.50)</span>
+<span>mean latency <b>{mean_latency:.2f}s</b></span>
+</div>
+<table>
+<tr><th>Run</th><th>Mode</th><th>Latency</th><th>Cost</th><th>Ungrounded</th></tr>
+{rows}
+</table>
+</body></html>"""

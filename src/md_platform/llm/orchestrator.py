@@ -5,6 +5,7 @@ Manages tool-calling to the LLM (Anthropic) for narrative generation.
 
 import logging
 import os
+import time
 from typing import Any, Dict, List, Optional
 
 try:
@@ -14,6 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency in local d
 
 from ..aggregation.report_summary import build_report_summary
 from ..ml.schemas import MLAnalysisBundle
+from ..observability import LLM_METRICS, LLMCallMetric, span
 from ..schemas.analysis_bundle import AnalysisBundle
 from .grounding_checker import check_grounding
 
@@ -93,158 +95,156 @@ class LLMOrchestrator:
     ) -> str:
         """Generate a narrative report using the LLM and verify its grounding."""
         summary = build_report_summary(bundle, ml_bundle)
-
-        if not self.api_key:
-            draft_report = self._render_fallback_report(summary)
-            ungrounded_claims = check_grounding(draft_report, bundle, ml_bundle)
-            if ungrounded_claims:
-                logger.warning("Ungrounded claims found: %s", ungrounded_claims)
-                draft_report += (
-                    f"\n\n[QC WARNING] The following numbers failed the grounding check: "
-                    f"{', '.join(ungrounded_claims)}"
-                )
-            return draft_report
-
-        if anthropic is None:
-            logger.warning("anthropic package not installed; using fallback report generation.")
-            draft_report = self._render_fallback_report(summary)
-            ungrounded_claims = check_grounding(draft_report, bundle, ml_bundle)
-            if ungrounded_claims:
-                logger.warning("Ungrounded claims found: %s", ungrounded_claims)
-                draft_report += (
-                    f"\n\n[QC WARNING] The following numbers failed the grounding check: "
-                    f"{', '.join(ungrounded_claims)}"
-                )
-            return draft_report
-
-        system_prompt = (
-            "You are a structural biology expert analyzing MD trajectories. "
-            "Write a concise scientific report using only the figures returned by the tools. "
-            "Do not invent numbers. Structure the output as QC Assessment, Structural Stability, "
-            "Biological Interpretation, Limitations, Follow-ups, and an optional Phase 4 ML section if present."
-        )
-
-        tools = [
-            {
-                "name": "get_metric_summary",
-                "description": "Get mean and std values for a metric (e.g. 'rmsd', 'rg').",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "metric_name": {"type": "string", "description": "Name of the metric or module"}
-                    },
-                    "required": ["metric_name"]
-                }
-            },
-            {
-                "name": "get_qc_flags",
-                "description": "Get all quality control flags.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {}
-                }
-            },
-            {
-                "name": "compare_to_reference_ranges",
-                "description": "Compare a metric to known literature heuristics.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "metric_name": {"type": "string"}
-                    },
-                    "required": ["metric_name"]
-                }
-            }
-        ]
-
-        client = anthropic.Anthropic(api_key=self.api_key)
-
-        # Plan metric (tracked, not gated): cost per report, target < $0.50.
+        started = time.perf_counter()
         tokens_in = 0
         tokens_out = 0
 
-        try:
-            messages: List[Dict[str, Any]] = [
-                {
-                    "role": "user",
-                    "content": (
-                        "Generate a grounded MD analysis report using this compact summary:\n"
-                        f"{summary}"
-                    ),
-                }
-            ]
-            response = client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=1000,
-                system=system_prompt,
-                tools=tools,
-                messages=messages,
-            )
+        with span("llm.generate_report", {"run_id": bundle.run_id}) as current:
+            mode = "fallback"
+            if not self.api_key or anthropic is None:
+                if self.api_key:
+                    logger.warning("anthropic package not installed; using fallback report generation.")
+                draft_report = self._render_fallback_report(summary)
+            else:
+                mode = "llm"
+                system_prompt = (
+                    "You are a structural biology expert analyzing MD trajectories. "
+                    "Write a concise scientific report using only the figures returned by the tools. "
+                    "Do not invent numbers. Structure the output as QC Assessment, Structural Stability, "
+                    "Biological Interpretation, Limitations, Follow-ups, and an optional Phase 4 ML section if present."
+                )
 
-            for _ in range(4):
-                usage = getattr(response, "usage", None)
-                if usage:
-                    tokens_in += usage.input_tokens
-                    tokens_out += usage.output_tokens
-                if response.stop_reason != "tool_use":
-                    break
-
-                tool_results: List[Dict[str, Any]] = []
-                for block in response.content:
-                    if block.type != "tool_use":
-                        continue
-                    if block.name == "get_metric_summary":
-                        result = self._get_metric_summary(bundle, block.input["metric_name"])
-                    elif block.name == "get_qc_flags":
-                        result = self._get_qc_flags(bundle)
-                    elif block.name == "compare_to_reference_ranges":
-                        result = self._compare_to_reference_ranges(bundle, block.input["metric_name"])
-                    else:
-                        result = "Unknown tool."
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result,
+                tools = [
+                    {
+                        "name": "get_metric_summary",
+                        "description": "Get mean and std values for a metric (e.g. 'rmsd', 'rg').",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "metric_name": {"type": "string", "description": "Name of the metric or module"}
+                            },
+                            "required": ["metric_name"]
                         }
+                    },
+                    {
+                        "name": "get_qc_flags",
+                        "description": "Get all quality control flags.",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    },
+                    {
+                        "name": "compare_to_reference_ranges",
+                        "description": "Compare a metric to known literature heuristics.",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "metric_name": {"type": "string"}
+                            },
+                            "required": ["metric_name"]
+                        }
+                    }
+                ]
+
+                client = anthropic.Anthropic(api_key=self.api_key)
+
+                try:
+                    messages: List[Dict[str, Any]] = [
+                        {
+                            "role": "user",
+                            "content": (
+                                "Generate a grounded MD analysis report using this compact summary:\n"
+                                f"{summary}"
+                            ),
+                        }
+                    ]
+                    response = client.messages.create(
+                        model="claude-3-haiku-20240307",
+                        max_tokens=1000,
+                        system=system_prompt,
+                        tools=tools,
+                        messages=messages,
                     )
 
-                messages.extend(
-                    [
-                        {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": tool_results},
-                    ]
+                    for _ in range(4):
+                        usage = getattr(response, "usage", None)
+                        if usage:
+                            tokens_in += usage.input_tokens
+                            tokens_out += usage.output_tokens
+                        if response.stop_reason != "tool_use":
+                            break
+
+                        tool_results: List[Dict[str, Any]] = []
+                        for block in response.content:
+                            if block.type != "tool_use":
+                                continue
+                            if block.name == "get_metric_summary":
+                                result = self._get_metric_summary(bundle, block.input["metric_name"])
+                            elif block.name == "get_qc_flags":
+                                result = self._get_qc_flags(bundle)
+                            elif block.name == "compare_to_reference_ranges":
+                                result = self._compare_to_reference_ranges(bundle, block.input["metric_name"])
+                            else:
+                                result = "Unknown tool."
+                            tool_results.append(
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": result,
+                                }
+                            )
+
+                        messages.extend(
+                            [
+                                {"role": "assistant", "content": response.content},
+                                {"role": "user", "content": tool_results},
+                            ]
+                        )
+                        response = client.messages.create(
+                            model="claude-3-haiku-20240307",
+                            max_tokens=1000,
+                            system=system_prompt,
+                            tools=tools,
+                            messages=messages,
+                        )
+
+                    usage = getattr(response, "usage", None)
+                    if usage:
+                        tokens_in += usage.input_tokens
+                        tokens_out += usage.output_tokens
+                    draft_report = response.content[0].text if response.content else ""
+                except Exception as e:
+                    logger.error(f"LLM generation failed: {e}")
+                    mode = "fallback"
+                    draft_report = self._render_fallback_report(summary)
+
+            ungrounded_claims = check_grounding(draft_report, bundle, ml_bundle)
+            if ungrounded_claims:
+                logger.warning(f"Ungrounded claims found: {ungrounded_claims}")
+                draft_report += f"\n\n[QC WARNING] The following numbers failed the grounding check: {', '.join(ungrounded_claims)}"
+
+            # Plan metric (tracked, not gated): cost per report, target < $0.50.
+            cost_usd = (tokens_in * 0.25 + tokens_out * 1.25) / 1_000_000 if mode == "llm" else 0.0
+            latency_s = time.perf_counter() - started
+            if current is not None:
+                current.set_attribute("mode", mode)
+                current.set_attribute("latency_s", latency_s)
+                current.set_attribute("cost_usd", cost_usd)
+                current.set_attribute("ungrounded_claims", len(ungrounded_claims))
+            LLM_METRICS.record(
+                LLMCallMetric(
+                    run_id=bundle.run_id,
+                    mode=mode,
+                    latency_s=latency_s,
+                    cost_usd=cost_usd,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    ungrounded_claims=len(ungrounded_claims),
                 )
-                response = client.messages.create(
-                    model="claude-3-haiku-20240307",
-                    max_tokens=1000,
-                    system=system_prompt,
-                    tools=tools,
-                    messages=messages,
-                )
+            )
 
-            usage = getattr(response, "usage", None)
-            if usage:
-                tokens_in += usage.input_tokens
-                tokens_out += usage.output_tokens
-            draft_report = response.content[0].text if response.content else ""
-        except Exception as e:
-            logger.error(f"LLM generation failed: {e}")
-            draft_report = self._render_fallback_report(summary)
-
-        # Claude 3 Haiku list price: $0.25/M input, $1.25/M output tokens.
-        cost_usd = (tokens_in * 0.25 + tokens_out * 1.25) / 1_000_000
-        logger.info(
-            "LLM report cost $%.4f (%d in / %d out tokens, target <$0.50)",
-            cost_usd, tokens_in, tokens_out,
-        )
-
-        ungrounded_claims = check_grounding(draft_report, bundle, ml_bundle)
-        if ungrounded_claims:
-            logger.warning(f"Ungrounded claims found: {ungrounded_claims}")
-            draft_report += f"\n\n[QC WARNING] The following numbers failed the grounding check: {', '.join(ungrounded_claims)}"
-
-        return draft_report
+            return draft_report
 
     def _render_fallback_report(self, summary: Dict[str, Any]) -> str:
         """Render a deterministic report when no LLM key is configured."""
@@ -303,6 +303,8 @@ class LLMOrchestrator:
                 lines.append(
                     f"- PCA/TICA state agreement: {baseline['state_agreement_nmi']:.2f} NMI."
                 )
+            if ml.get("vampnet_ablation"):
+                lines.append(f"- {ml['vampnet_ablation']['summary']}")
 
         lines.extend(
             [

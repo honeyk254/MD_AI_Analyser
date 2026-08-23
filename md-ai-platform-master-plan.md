@@ -429,4 +429,4 @@ Use this when scope pressure hits and something has to give.
 - [x] Phase 3: single-host deploy, pre-loaded demo trajectories
 - [x] Phase 4: TICA+MSM with baseline comparison, minimum-data gating, CK validation
 - [x] Phase 5: contract tests, formal LLM eval harness, Analysis Cards
-- [ ] Phase 6 (optional): VAMPnets ablation, full AWS, tracing/cost dashboard, remaining modules
+- [x] Phase 6 (optional): VAMPnets ablation, full AWS, tracing/cost dashboard, remaining modules

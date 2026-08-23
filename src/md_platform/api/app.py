@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .routes import demo_router, router
+from .routes import demo_router, metrics_router, router
 
 logging.basicConfig(level=logging.INFO)
 
@@ -63,6 +63,7 @@ def create_app() -> FastAPI:
 
     app.include_router(router)
     app.include_router(demo_router)
+    app.include_router(metrics_router)
 
     @app.get("/health")
     async def health_check():

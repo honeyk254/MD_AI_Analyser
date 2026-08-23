@@ -23,6 +23,7 @@ from .schemas import (
     MLGatingSummary,
     MSMSummary,
 )
+from .vampnets import run_vampnet_ablation
 
 
 def run_phase4_ml_analysis(
@@ -65,6 +66,7 @@ def run_phase4_ml_analysis(
     tica = None
     msm = None
     baseline = None
+    vampnet_ablation = None
     observed_min_transition_count = 0
     ck_deviation = 0.0
     status = "blocked"
@@ -128,6 +130,18 @@ def run_phase4_ml_analysis(
                         f"CK deviation {ck_deviation:.3f} exceeded the threshold of "
                         f"{request.ml_ck_threshold:.3f}; reported is_markovian=False."
                     )
+                vampnet_ablation = run_vampnet_ablation(
+                    feature_matrix=feature_matrix,
+                    lag_frames=lag_frames,
+                    lag_ps=request.ml_lag_frames * classical_bundle.trajectory_metadata.timestep_ps,
+                    n_states=effective_states,
+                    tica_labels=tica_labels,
+                    tica_leading_timescale_ps=(
+                        msm.implied_timescales_ps[0] if msm and msm.implied_timescales_ps else None
+                    ),
+                )
+                if vampnet_ablation and not vampnet_ablation.available:
+                    notes.append(vampnet_ablation.summary)
     except Exception as exc:
         gating_reasons.append(f"ML analysis failed: {exc}")
         gating_passed = False
@@ -191,6 +205,7 @@ def run_phase4_ml_analysis(
         tica=tica,
         msm=msm,
         baseline_comparison=baseline,
+        vampnet_ablation=vampnet_ablation,
         analysis_card=analysis_card,
         refusal_reason=refusal_reason,
         notes=notes,

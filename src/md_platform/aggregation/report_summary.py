@@ -100,6 +100,12 @@ def _module_takeaway(name: str, result: ModuleResult) -> str:
     if name == "salt_bridges" and "salt_bridge_count" in result.scalar_metrics:
         metric = result.scalar_metrics["salt_bridge_count"]
         return f"Salt bridges averaged {metric.mean:.2f} per frame."
+    if name == "dihedrals" and "mean_backbone_circular_std" in result.scalar_metrics:
+        metric = result.scalar_metrics["mean_backbone_circular_std"]
+        return f"Backbone dihedral flexibility (circular std) averaged {metric.mean:.1f} {metric.unit}."
+    if name == "com" and "com_drift" in result.scalar_metrics:
+        metric = result.scalar_metrics["com_drift"]
+        return f"Center-of-mass drift stayed at {metric.max:.2f} {metric.unit} (max)."
     return "Summary available."
 
 
