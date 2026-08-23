@@ -47,7 +47,7 @@ An advanced, modular platform for molecular dynamics (MD) trajectory analysis. T
 ### 5. Production Deployment & Demo System
 * **Reverse-Proxy Architecture:** Production Docker Compose stack with Caddy proxying port `80` to private FastAPI instances.
 * **Built-in Security Guards:** Request payload size limits (64 KB default, `MAX_REQUEST_BODY_BYTES`) and IP-based rate limiting respecting `X-Forwarded-For`.
-* **Bundled Zero-Setup Demos:** Includes pre-packaged synthetic peptide trajectories (`stable` and `flexible`) for instant testing.
+* **Bundled Zero-Setup Demos:** Includes pre-packaged synthetic trajectories (`stable`, `flexible`, and `kinetics` — a two-state system with real interconversion statistics for the ML layer) for instant testing.
 
 ---
 
@@ -141,7 +141,7 @@ SQS/Step Functions are deliberately omitted: the service is synchronous, and the
 * `POST /api/v1/analysis/{run_id}/review`: Approve or sign off on an analysis run after review.
 
 ### Zero-Setup Demo Trajectories
-* `GET /api/v1/demo/examples`: List available bundled demo datasets (`stable`, `flexible`).
+* `GET /api/v1/demo/examples`: List available bundled demo datasets (`stable`, `flexible`, `kinetics`).
 * `POST /api/v1/demo/{example_name}/submit`: Submit a bundled demo trajectory without uploading any files.
 
 ### Observability
@@ -198,7 +198,10 @@ mypy src
 
 ## 📋 Roadmap
 
-Live demo report: **https://honeyk254.github.io/MD_AI_Analyser/** (reference-system report generated end-to-end by the pipeline through the grounding check and human review gate; generated with the Phase 1–3 module set — the live page predates the dihedrals/COM modules).
+Live demo reports: **https://honeyk254.github.io/MD_AI_Analyser/** — three pages generated end-to-end by the pipeline (through the grounding check and human review gate):
+* **[Reference system](https://honeyk254.github.io/MD_AI_Analyser/adk-report.html)** — adenylate kinase (Beckstein et al. 2009), all 10 classical modules; the ML layer refuses to run because DIMS is a directed, non-equilibrium trajectory with too few interconversions (the gate doing its job).
+* **[Synthetic kinetics](https://honeyk254.github.io/MD_AI_Analyser/kinetics-report.html)** — a clearly-labeled synthetic two-state system with real interconversion statistics: the full ML layer end to end (gating → TICA/MSM → CK validation → PCA baseline → VAMPnet ablation, e.g. VAMPnet vs TICA/MSM leading timescales 6.4 vs 6.0 ps).
+* **[Peptide demo](https://honeyk254.github.io/MD_AI_Analyser/demo-report.html)** — the bundled zero-setup demo input (9 modules; H-bonds require hydrogens/charges this synthetic PDB lacks, and the ML gate refuses its 12 frames).
 
 This project executes against the [Master Plan](md-ai-platform-master-plan.md):
 * ✅ **Phase 0:** Data contracts, provenance run-card, CI (lint + type-check + tests + coverage gate), reference trajectory with published ranges

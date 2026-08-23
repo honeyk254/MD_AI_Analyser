@@ -23,7 +23,7 @@ try:
 except ModuleNotFoundError:  # optional dependency
     torch = None  # type: ignore[assignment]
 
-EPOCHS = 300
+EPOCHS = 2000
 SEED = 42
 
 
@@ -86,10 +86,12 @@ def run_vampnet_ablation(
             chit = net(xt)
             vamp2 = float(_vamp2_score(chi0, chit, identity))
 
-        vamp_labels = np.argmax(probs, axis=1)
+        # Cluster the soft output (VAMPnets paper practice): argmax on a
+        # calibrated-but-shifted softmax can be constant even when the
+        # continuous output carries the full slow-mode signal.
+        from .analysis import _cluster_embeddings, _normalized_mutual_information, _transition_timescales
 
-        # ponytail: reuse the Phase 4 comparison helpers instead of a second MSM path
-        from .analysis import _normalized_mutual_information, _transition_timescales
+        vamp_labels = _cluster_embeddings(probs, n_states)
 
         timescales = _transition_timescales(vamp_labels, lag_frames, lag_ps)
         leading = timescales[0] if timescales else None

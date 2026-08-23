@@ -12,9 +12,12 @@ from md_platform.demo_inputs import ensure_demo_inputs
 def test_demo_inputs_materialize(tmp_path: Path) -> None:
     examples = ensure_demo_inputs(tmp_path)
 
-    assert set(examples) == {"stable", "flexible"}
+    assert set(examples) == {"stable", "flexible", "kinetics"}
     assert Path(examples["stable"]["topology_file"]).exists()
     assert Path(examples["stable"]["trajectory_file"]).exists()
+    # The kinetics demo must clear the default ML minimum-frame gate (100).
+    trajectory = Path(examples["kinetics"]["trajectory_file"]).read_text(encoding="utf-8")
+    assert trajectory.count("MODEL") >= 100
 
 
 def test_demo_examples_endpoint_lists_examples() -> None:
@@ -24,7 +27,7 @@ def test_demo_examples_endpoint_lists_examples() -> None:
 
     assert response.status_code == 200
     names = {item["name"] for item in response.json()}
-    assert names == {"stable", "flexible"}
+    assert names == {"stable", "flexible", "kinetics"}
 
 
 def test_request_guard_blocks_large_bodies() -> None:

@@ -30,3 +30,4 @@ Thumbs.db
 .agents/
 skills-lock.json
 .coverage
+data/inputs/examples/
