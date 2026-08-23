@@ -31,3 +31,4 @@ Thumbs.db
 skills-lock.json
 .coverage
 data/inputs/examples/
+data/inputs/adk/
