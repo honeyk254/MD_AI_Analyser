@@ -6,6 +6,25 @@
 
 ---
 
+## Status addendum (2026-08-25): mapping to the rebuilt codebase
+
+The audited `backend/` tree no longer exists. It was replaced by the
+`src/md_platform/` rewrite (see `md-ai-platform-master-plan.md` §1.3: the
+original 21-module codebase was restructured, not ported wholesale). Where
+each finding stands today:
+
+| Finding | Status in `src/md_platform/` |
+|---|---|
+| **C1** (tICA `eigh` on non-symmetric matrix) | **Fixed in the rewrite.** `ml/analysis.py::_run_tica` whitens via inverse Cholesky and symmetrizes before `np.linalg.eigh` — the standard sound formulation of the generalized eigenproblem. |
+| **C2** (salt bridges: carboxylate carbon + 4.0 Å) | **Fixed 2026-08-25.** `domain/classical/salt_bridges.py` v2.1.0 selects the carboxylate **oxygens** (ASP OD1/OD2, GLU OE1/OE2, per Barlow & Thornton 1983) with per-frame residue-pair deduplication, and the regression suite now pins the ADK baseline (the carbon-centred selection found 30.2 bridges/frame vs 37.4 with oxygens — the predicted ~24% undercount). |
+| **M3** (MSM: no uncertainty on implied timescales) | **Fixed 2026-08-25.** Implied timescales now carry 90% CIs from a seeded moving-block bootstrap (200 resamples, block = 5× lag); see `ANALYSIS_CARDS.md`. |
+| **C3, M1–M2, M4–M8, m1–m6** | **Not applicable.** Those modules (entropy, PRS, free-energy landscape, NMA, GNN, VAE, tunnel detection, bio-inference, DCCM, energy decomposition, binding kinetics, transformer, convergence, allosteric network) were deliberately **not ported** — the rebuilt engine is the master plan's 10-module classical set plus the gated TICA/MSM/VAMPnet layer. |
+
+The findings below are retained verbatim as the audit of record for the
+original codebase.
+
+---
+
 ## Executive Summary
 
 The codebase implements ~31 analysis modules for GROMACS molecular dynamics trajectory analysis. The core physics and mathematical formulations are **largely correct**: Kabsch alignment via SVD with reflection correction, standard DCCM via einsum, correct Schlitter entropy with SI units, and a well-implemented vectorised ANM Hessian. Caveats are included on heuristic modules, which is commendable.

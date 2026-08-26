@@ -357,13 +357,24 @@ def _plot_msm_timescales(ml_bundle: MLAnalysisBundle) -> Optional[go.Figure]:
     timescales = ml_bundle.msm.implied_timescales_ps
     if not timescales:
         return None
+    cis = ml_bundle.msm.implied_timescales_ci_ps
+    error_y = None
+    if cis and len(cis) == len(timescales):
+        error_y = dict(
+            type="data",
+            symmetric=False,
+            array=[max(ci[1] - ts, 0.0) for ci, ts in zip(cis, timescales)],
+            arrayminus=[max(ts - ci[0], 0.0) for ci, ts in zip(cis, timescales)],
+            color=BLACK,
+        )
     fig = go.Figure()
     fig.add_trace(
         go.Bar(
             x=[f"t{i+1}" for i in range(len(timescales))],
             y=timescales,
             marker_color=ACCENT_TEAL, marker_line_color=BLACK, marker_line_width=1,
-            name="Implied timescales",
+            error_y=error_y,
+            name="Implied timescales (90% bootstrap CI)",
         )
     )
     fig.add_hline(

@@ -39,6 +39,9 @@ class MSMSummary(BaseModel):
     transition_matrix: List[List[float]] = Field(default_factory=list)
     stationary_distribution: List[float] = Field(default_factory=list)
     implied_timescales_ps: List[float] = Field(default_factory=list)
+    # [p5, p95] per implied timescale from the seeded moving-block bootstrap;
+    # None when the label sequence is too short to resample.
+    implied_timescales_ci_ps: Optional[List[List[float]]] = None
     ck_steps: int
     ck_deviation: float
     is_markovian: bool

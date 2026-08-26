@@ -64,13 +64,13 @@
 <body>
 <div class="container">
   <h1>MD AI Platform — Progress Dashboard</h1>
-  <div class="subtitle">Generated 2026-08-22 (evening) &middot; vs. <em>md-ai-platform-master-plan.md</em> &middot; HEAD <code>93d0af8</code> &middot; CI green &middot; <a href="https://honeyk254.github.io/MD_AI_Analyser/">live demo report</a></div>
+  <div class="subtitle">Updated 2026-08-25 &middot; vs. <em>md-ai-platform-master-plan.md</em> &middot; all phases complete &middot; CI green &middot; <a href="https://honeyk254.github.io/MD_AI_Analyser/">live demo report</a></div>
 
   <div class="grid">
-    <div class="kpi"><div class="value green">100%</div><div class="label">Phases 0–3<br>(plan definitions of done)</div></div>
-    <div class="kpi"><div class="value">90%</div><div class="label">Full plan through Phase 5<br>(effort-weighted)</div></div>
-    <div class="kpi"><div class="value green">24/24</div><div class="label">Tests passing in CI<br>(incl. regression suite)</div></div>
-    <div class="kpi"><div class="value green">95%</div><div class="label">Domain-layer coverage<br>(gate: ≥80%)</div></div>
+    <div class="kpi"><div class="value green">100%</div><div class="label">Master plan complete<br>(Phases 0–6)</div></div>
+    <div class="kpi"><div class="value green">39/39</div><div class="label">Tests passing in CI<br>(incl. regression + LLM eval)</div></div>
+    <div class="kpi"><div class="value green">93%</div><div class="label">Domain-layer coverage<br>(gate: ≥80%)</div></div>
+    <div class="kpi"><div class="value green">10</div><div class="label">Classical modules<br>(plan ceiling)</div></div>
     <div class="kpi"><div class="value green">Live</div><div class="label">Public demo URL<br>(GitHub Pages)</div></div>
   </div>
 
@@ -85,7 +85,7 @@
   <div class="phase">
     <div class="phase-head"><span class="phase-title">Phase 1 — Deterministic classical engine <span class="status-chip done">done</span></span><span class="pct">100%</span></div>
     <div class="bar-track"><div class="bar-fill fill-done" style="width:100%"></div></div>
-    <div class="phase-notes"><span class="ok">✓ 8/8 modules</span> &middot; <span class="ok">✓ regression suite matches published anchors exactly (RMSD 6.85 Å, Rg frame-0 16.669 Å) and runs in CI on every commit</span> &middot; <span class="ok">✓ coverage 95% vs ≥80% target</span> &middot; <span class="ok">✓ runtime baseline recorded (~13 s)</span> &middot; <span class="ok">✓ compose runs the full pipeline (verified end-to-end)</span></div>
+    <div class="phase-notes"><span class="ok">✓ 10/10 modules (dihedrals + COM added with Phase 6)</span> &middot; <span class="ok">✓ regression suite matches published anchors exactly (RMSD 6.85 Å, Rg frame-0 16.669 Å) and runs in CI on every commit</span> &middot; <span class="ok">✓ salt-bridge charge centres corrected 2026-08-25 (carboxylate oxygens; ADK band pinned at 37.4 bridges/frame)</span> &middot; <span class="ok">✓ coverage 93% vs ≥80% target</span></div>
   </div>
 
   <div class="phase">
@@ -101,33 +101,33 @@
   </div>
 
   <div class="phase">
-    <div class="phase-head"><span class="phase-title">Phase 4 — TICA + MSM statistical layer <span class="status-chip wip">done per DoD, hardening optional</span></span><span class="pct">90%</span></div>
-    <div class="bar-track"><div class="bar-fill fill-wip" style="width:90%"></div></div>
-    <div class="phase-notes"><span class="ok">✓ committed &amp; green: gating with refusal reasons (tested), CK validation, PCA baseline, Analysis Card, integrated into reporting</span> &middot; <span class="ok">✓ hand-rolled NumPy implementation (deeptime-free)</span> &middot; optional upgrade: swap to <code>deeptime</code> for maintained numerics</div>
+    <div class="phase-head"><span class="phase-title">Phase 4 — TICA + MSM statistical layer <span class="status-chip done">done</span></span><span class="pct">100%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-done" style="width:100%"></div></div>
+    <div class="phase-notes"><span class="ok">✓ gating with refusal reasons (tested)</span> &middot; <span class="ok">✓ CK validation before is_markovian</span> &middot; <span class="ok">✓ PCA baseline in every MSM report</span> &middot; <span class="ok">✓ Analysis Card</span> &middot; <span class="ok">✓ bootstrap 90% CIs on implied timescales (2026-08-25, seeded moving-block)</span> &middot; hand-rolled NumPy implementation (deeptime-free)</div>
   </div>
 
   <div class="phase">
-    <div class="phase-head"><span class="phase-title">Phase 5 — Testing rigor + Analysis Cards <span class="status-chip wip">early</span></span><span class="pct">40%</span></div>
-    <div class="bar-track"><div class="bar-fill fill-wip" style="width:40%"></div></div>
-    <div class="phase-notes"><span class="ok">✓ Analysis Card in the ML bundle</span> &middot; <span class="ok">✓ schema contract tests</span> &middot; <span class="ok">✓ CI runtime ~2 min (&lt;10 min target)</span> &middot; <span class="miss">✗ formal LLM eval harness with scored rubric</span></div>
+    <div class="phase-head"><span class="phase-title">Phase 5 — Testing rigor + Analysis Cards <span class="status-chip done">done</span></span><span class="pct">100%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-done" style="width:100%"></div></div>
+    <div class="phase-notes"><span class="ok">✓ formal LLM eval harness: 4 known-correct + 5 injected-error fixtures, scored rubric at 100%</span> &middot; <span class="ok">✓ Analysis Card required on every ML bundle (contract-enforced)</span> &middot; <span class="ok">✓ AnalysisBundle contract tests (producer/consumer + JSON round-trip)</span> &middot; <span class="ok">✓ CI well under the 10-minute target</span></div>
   </div>
 
   <div class="phase">
-    <div class="phase-head"><span class="phase-title">Phase 6 — Stretch (VAMPnets, AWS, tracing) <span class="status-chip todo">not started</span></span><span class="pct">0%</span></div>
-    <div class="bar-track"><div class="bar-fill fill-todo" style="width:0%"></div></div>
-    <div class="phase-notes">Correctly deferred — plan marks this as upside, not requirement.</div>
+    <div class="phase-head"><span class="phase-title">Phase 6 — Stretch (VAMPnets, AWS, tracing) <span class="status-chip done">done</span></span><span class="pct">100%</span></div>
+    <div class="bar-track"><div class="bar-fill fill-done" style="width:100%"></div></div>
+    <div class="phase-notes"><span class="ok">✓ VAMPnet ablation vs TICA/MSM (VAMP-2-scored, CPU torch in CI, agreement as specific numbers)</span> &middot; <span class="ok">✓ OpenTelemetry tracing + LLM cost/latency dashboard (/api/v1/metrics/*)</span> &middot; <span class="ok">✓ full-AWS Terraform artifact (deploy/aws/main.tf, apply→capture→destroy)</span> &middot; <span class="ok">✓ dihedrals + COM drift → 10-module engine (plan ceiling)</span> &middot; autoencoder CVs and SQS/Step Functions skipped by design per the master plan</div>
   </div>
 
-  <h2>Code by subsystem <span class="chip">src/ = 3,761 LOC &middot; tests = 526 LOC &middot; all committed</span></h2>
+  <h2>Code by subsystem <span class="chip">src/ = 4,667 LOC &middot; tests = 821 LOC</span></h2>
   <div class="card">
-    <div class="loc-row"><span>domain (classical)</span><div class="loc-track"><div class="loc-fill" style="width:100%"></div></div><span class="loc-num">1,056</span></div>
-    <div class="loc-row"><span>ml (Phase 4)</span><div class="loc-track"><div class="loc-fill" style="width:65%"></div></div><span class="loc-num">688</span></div>
-    <div class="loc-row"><span>reporting</span><div class="loc-track"><div class="loc-fill" style="width:50%"></div></div><span class="loc-num">526</span></div>
-    <div class="loc-row"><span>llm (grounding)</span><div class="loc-track"><div class="loc-fill" style="width:41%"></div></div><span class="loc-num">432</span></div>
-    <div class="loc-row"><span>core+demo</span><div class="loc-track"><div class="loc-fill" style="width:38%"></div></div><span class="loc-num">398</span></div>
+    <div class="loc-row"><span>domain (classical)</span><div class="loc-track"><div class="loc-fill" style="width:100%"></div></div><span class="loc-num">1,049</span></div>
+    <div class="loc-row"><span>ml (TICA/MSM + VAMPnet)</span><div class="loc-track"><div class="loc-fill" style="width:91%"></div></div><span class="loc-num">957</span></div>
+    <div class="loc-row"><span>reporting</span><div class="loc-track"><div class="loc-fill" style="width:62%"></div></div><span class="loc-num">648</span></div>
+    <div class="loc-row"><span>core+demo+observability</span><div class="loc-track"><div class="loc-fill" style="width:55%"></div></div><span class="loc-num">578</span></div>
+    <div class="loc-row"><span>llm (grounding)</span><div class="loc-track"><div class="loc-fill" style="width:41%"></div></div><span class="loc-num">434</span></div>
     <div class="loc-row"><span>schemas</span><div class="loc-track"><div class="loc-fill" style="width:30%"></div></div><span class="loc-num">318</span></div>
-    <div class="loc-row"><span>api</span><div class="loc-track"><div class="loc-fill" style="width:22%"></div></div><span class="loc-num">228</span></div>
-    <div class="loc-row"><span>aggregation</span><div class="loc-track"><div class="loc-fill" style="width:20%"></div></div><span class="loc-num">215</span></div>
+    <div class="loc-row"><span>api</span><div class="loc-track"><div class="loc-fill" style="width:28%"></div></div><span class="loc-num">290</span></div>
+    <div class="loc-row"><span>aggregation</span><div class="loc-track"><div class="loc-fill" style="width:21%"></div></div><span class="loc-num">221</span></div>
   </div>
 
   <h2>Timeline <span class="chip">23 commits &middot; two-architecture history</span></h2>
@@ -140,32 +140,38 @@
       <div class="tl-item wip"><div class="tl-date">2026-08-22 morning</div><div class="tl-text">Over-engineering audit (15 findings, −220 lines identified) + Phase 4 WIP review; progress dashboard v1</div></div>
       <div class="tl-item milestone"><div class="tl-date">2026-08-22 evening</div><div class="tl-text"><strong>Phases 0–3 to 100% in one session:</strong> regression suite matching published ADK values exactly, CI upgraded to lint+type+tests+coverage (green), 24/24 tests, mypy/ruff clean, compose verified e2e through Caddy, $PORT-tested image</div></div>
       <div class="tl-item milestone"><div class="tl-date">2026-08-22 night</div><div class="tl-text"><strong>Shipped:</strong> pushed to GitHub (a17a6e2 → 93d0af8, CI green on HEAD after fixing a CI-only mypy/anthropic-stub gap) and published the public demo URL on GitHub Pages — full 8-analysis reference report + bundled demo report, verified unauthenticated</div></div>
+      <div class="tl-item milestone"><div class="tl-date">2026-08-23 → 08-25</div><div class="tl-text"><strong>Plan complete through Phase 6:</strong> formal LLM eval harness (scored rubric, 100%), VAMPnet ablation on CPU torch in CI, OpenTelemetry tracing + cost/latency dashboard, Terraform AWS artifact, dihedrals + COM (10-module engine), kinetics demo input with live ML report</div></div>
+      <div class="tl-item milestone"><div class="tl-date">2026-08-25</div><div class="tl-text"><strong>Scientific-correctness carryover sweep:</strong> salt-bridge charge centres fixed (audit C2 — carboxylate oxygens find ~24% more bridges on ADK; regression band pinned), MSM implied-timescale bootstrap CIs (audit M3), audit status addendum + docs synced to reality</div></div>
     </div>
   </div>
 
-  <h2>Test suite <span class="chip">24 checks &middot; 24 pass &middot; runs in CI on every commit</span></h2>
+  <h2>Test suite <span class="chip">39 checks &middot; 39 pass &middot; runs in CI on every commit</span></h2>
   <table>
     <tr><th>File</th><th>Covers</th><th>Result</th></tr>
-    <tr><td>test_api.py</td><td>Health endpoint</td><td class="pass">pass</td></tr>
+    <tr><td>test_api.py</td><td>Health + analysis endpoints</td><td class="pass">pass</td></tr>
     <tr><td>test_schemas.py</td><td>Bundle schema contract</td><td class="pass">pass</td></tr>
-    <tr><td>test_phase2.py</td><td>Grounding catches 5 injected errors, report summary, review gate</td><td class="pass">pass</td></tr>
+    <tr><td>test_contracts.py</td><td>Producer/consumer + JSON round-trip, Analysis Card coverage</td><td class="pass">pass</td></tr>
+    <tr><td>test_llm_eval.py</td><td>LLM eval harness: 4 known-correct + 5 injected-error fixtures, scored rubric</td><td class="pass">pass</td></tr>
+    <tr><td>test_phase2.py</td><td>Grounding catches injected errors, report summary, review gate</td><td class="pass">pass</td></tr>
     <tr><td>test_phase3.py</td><td>Demo inputs, endpoints, rate limiting, request guard</td><td class="pass">pass</td></tr>
-    <tr><td>test_phase4.py</td><td>ML bundle + summary, refusal on insufficient frames, ML grounding</td><td class="pass">pass</td></tr>
-    <tr><td>test_regression.py</td><td>All 8 modules vs published ADK values (RMSD 6.85 Å, Rg 16.669 Å) + drift bands</td><td class="pass">pass</td></tr>
+    <tr><td>test_phase4.py</td><td>ML bundle + summary, refusal on insufficient frames, timescale bootstrap CIs</td><td class="pass">pass</td></tr>
+    <tr><td>test_phase6.py</td><td>VAMPnet ablation + observability metrics</td><td class="pass">pass</td></tr>
+    <tr><td>test_regression.py</td><td>All 10 modules vs published ADK values (RMSD 6.85 Å, Rg 16.669 Å) + pinned drift bands incl. salt-bridge count</td><td class="pass">pass</td></tr>
   </table>
 
   <div class="callout">
-    <strong>Status: the plan's "strong, demoable state" is shipped and public.</strong> Core demo target (Phases 0–2) 100%, Phase 3 URL live,
-    CI green on HEAD, 24/24 tests with the regression suite enforced on every commit.
+    <strong>Status: the entire master plan (Phases 0–6) is shipped and public.</strong> 10-module classical engine with literature-corrected
+    charge centres, gated TICA/MSM with bootstrap CIs and VAMPnet ablation, grounding checker with a formal eval harness,
+    CI green with the regression suite enforced on every commit, live demo reports on GitHub Pages.
   </div>
 
   <div class="callout warn">
-    <strong>What's left, ranked:</strong> (1) Phase 5's formal LLM eval harness with scored rubric — the only missing plan deliverable through Phase 5;
-    (2) interactive-API host on fly.io — one command, needs the owner's login; (3) Phase 6 stretch goals (VAMPnets ablation, AWS capture, tracing);
-    (4) the audit's ~220 identified line-cuts remain unapplied (optional hygiene).
+    <strong>What's left, ranked:</strong> (1) interactive-API host on fly.io/Render — one command, needs the owner's login (the only
+    Phase 3 residual; static demo reports are live); (2) optional hygiene: apply the over-engineering audit's ~220 line-cuts,
+    or swap the hand-rolled MSM numerics to <code>deeptime</code>. No plan deliverables remain.
   </div>
 
-  <footer>MD AI Analyzer — progress snapshot from git history, LOC counts, CI API, and live URL checks &middot; 2026-08-22</footer>
+  <footer>MD AI Analyzer — progress snapshot from git history, LOC counts, CI API, and live URL checks &middot; 2026-08-25</footer>
 </div>
 </body>
 </html>

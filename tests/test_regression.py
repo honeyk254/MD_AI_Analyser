@@ -117,7 +117,11 @@ def test_remaining_modules_sane(reference_run):
     assert total == pytest.approx(1.0, abs=0.05)
 
     salt = modules["salt_bridges"].scalar_metrics["salt_bridge_count"]
-    assert salt.mean >= 0
+    # Carboxylate-oxygen charge centres (Barlow & Thornton 1983), recorded
+    # 2026-08-25. The carbon-centred selection this replaced found only
+    # ~30.2/frame on this trajectory — a silent ~24% underestimate.
+    assert salt.mean > 0
+    assert salt.mean == pytest.approx(37.408, rel=TOL)
 
     dihedrals = modules["dihedrals"].residue_metrics
     assert len(dihedrals["phi_circular_std"].values) == dihedrals["phi_circular_std"].resids[-1]

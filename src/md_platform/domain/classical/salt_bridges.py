@@ -16,7 +16,7 @@ from ...schemas.analysis_bundle import MetricSummary, ModuleResult
 
 logger = logging.getLogger("md_ai_analyzer")
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 
 def compute_salt_bridges(universe: mda.Universe, cutoff: float = 4.0, **kwargs) -> ModuleResult:
@@ -28,9 +28,12 @@ def compute_salt_bridges(universe: mda.Universe, cutoff: float = 4.0, **kwargs) 
         "(resname LYS and name NZ) or "
         "(resname HIP HSP and name NE2)"
     )
+    # The negative charge sits on the carboxylate oxygens, not the carbon
+    # (Barlow & Thornton 1983): N-O is 1.2-1.5 A shorter than N-C, so a
+    # carbon-centred 4.0 A cutoff misses 30-60% of real bridges.
     neg_sel = universe.select_atoms(
-        "(resname ASP and name CG) or "
-        "(resname GLU and name CD)"
+        "(resname ASP and name OD1 OD2) or "
+        "(resname GLU and name OE1 OE2)"
     )
 
     if len(pos_sel) == 0 or len(neg_sel) == 0:
@@ -55,10 +58,11 @@ def compute_salt_bridges(universe: mda.Universe, cutoff: float = 4.0, **kwargs) 
             pos_sel.positions, neg_sel.positions, box=ts.dimensions
         )
         contacts_ij = np.argwhere(dists <= cutoff)
-        total_per_frame[fi] = len(contacts_ij)
-
-        for i, j in contacts_ij:
-            key = (pos_labels[i], neg_labels[j])
+        # One bridge per residue pair per frame, even when both carboxylate
+        # oxygens fall inside the cutoff of the same positive centre.
+        bridged = {(pos_labels[i], neg_labels[j]) for i, j in contacts_ij}
+        total_per_frame[fi] = len(bridged)
+        for key in bridged:
             pair_contacts[key] = pair_contacts.get(key, 0) + 1
 
     pairs: List[Dict[str, Any]] = []
@@ -80,7 +84,11 @@ def compute_salt_bridges(universe: mda.Universe, cutoff: float = 4.0, **kwargs) 
         name="salt_bridges",
         version=__version__,
         runtime_seconds=time.time() - start_time,
-        parameters={"cutoff": cutoff},
+        parameters={
+            "cutoff": cutoff,
+            "negative_charge_center": "carboxylate_oxygen",
+            "pair_deduplication": "per-frame residue pair",
+        },
         scalar_metrics={
             "salt_bridge_count": MetricSummary(
                 mean=mean_sb,

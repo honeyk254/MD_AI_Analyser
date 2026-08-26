@@ -10,7 +10,7 @@ authors = [
     {name = "MD AI Analyzer Team"}
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.100.0",
     "pydantic>=2.0.0",

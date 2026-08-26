@@ -79,6 +79,11 @@ def _msm_summary(msm: Optional[MSMSummary]) -> Optional[Dict[str, Any]]:
         "minimum_pair_transition_count": msm.minimum_pair_transition_count,
         "stationary_distribution": list(msm.stationary_distribution),
         "implied_timescales_ps": list(msm.implied_timescales_ps[:3]),
+        "implied_timescales_ci_ps": (
+            [list(ci) for ci in msm.implied_timescales_ci_ps[:3]]
+            if msm.implied_timescales_ci_ps
+            else None
+        ),
     }
 
 
@@ -113,9 +118,17 @@ def _ml_takeaway(ml_bundle: MLAnalysisBundle) -> str:
 
     if ml_bundle.msm and ml_bundle.baseline_comparison:
         markovian = "passed" if ml_bundle.msm.is_markovian else "did not pass"
-        return (
+        takeaway = (
             f"TICA/MSM {markovian} CK validation at lag {ml_bundle.msm.lag_frames}; "
             f"baseline agreement was {ml_bundle.baseline_comparison.state_agreement_nmi:.2f} NMI."
         )
+        cis = ml_bundle.msm.implied_timescales_ci_ps
+        if ml_bundle.msm.implied_timescales_ps and cis:
+            leading = ml_bundle.msm.implied_timescales_ps[0]
+            takeaway += (
+                f" Leading implied timescale {leading:.1f} ps "
+                f"(bootstrap 90% CI {cis[0][0]:.1f}-{cis[0][1]:.1f} ps)."
+            )
+        return takeaway
 
     return "ML summary available."

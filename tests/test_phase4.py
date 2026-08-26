@@ -164,3 +164,33 @@ def test_phase4_ml_analysis_refuses_insufficient_frames() -> None:
 
     assert ml_bundle.status == "blocked"
     assert any("below the minimum" in reason for reason in ml_bundle.gating.reasons)
+
+
+def test_phase4_msm_timescale_bootstrap_cis() -> None:
+    from md_platform.ml.schemas import MLAnalysisBundle
+
+    def run() -> MLAnalysisBundle:
+        return run_phase4_ml_analysis(
+            _FakeUniverse(_ML_FRAMES), _make_classical_bundle(), _make_ml_request()
+        )
+
+    first = run()
+    second = run()
+
+    assert first.status == "completed"
+    assert first.msm is not None
+    point = first.msm.implied_timescales_ps
+    cis = first.msm.implied_timescales_ci_ps
+    assert point and cis
+    assert len(cis) == len(point)
+    for ts, (lo, hi) in zip(point, cis):
+        assert lo <= hi
+        assert lo <= ts <= hi
+
+    # Fixed bootstrap seed: run cards must reproduce the CIs exactly.
+    assert second.msm is not None
+    assert second.msm.implied_timescales_ci_ps == cis
+
+    summary = build_report_summary(_make_classical_bundle(), first)
+    assert summary["ml"]["msm"]["implied_timescales_ci_ps"] is not None
+    assert "bootstrap 90% CI" in summary["ml"]["takeaway"]

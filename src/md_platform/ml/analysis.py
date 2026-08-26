@@ -7,7 +7,7 @@ the existing reporting path only when explicitly enabled.
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import MDAnalysis as mda
 import numpy as np
@@ -322,6 +322,58 @@ def _cluster_embeddings(embedding: np.ndarray, n_states: int) -> np.ndarray:
     return labels
 
 
+_BOOTSTRAP_SEED = 20260825  # fixed so run cards reproduce the CIs exactly
+
+
+def _bootstrap_timescale_cis(
+    labels: np.ndarray,
+    lag_frames: int,
+    lag_ps: float,
+    n_states: int,
+    n_timescales: int,
+    n_bootstrap: int = 200,
+) -> Optional[List[List[float]]]:
+    """Moving-block bootstrap 90% CIs for the implied timescales.
+
+    Blocks are 5x the lag so resampled sequences keep the temporal
+    correlation the MSM assumes. Returns [p5, p95] per timescale, or None
+    when the sequence is too short to resample or no resample produced a
+    usable eigenvalue.
+    """
+    n = len(labels)
+    block_size = max(5 * lag_frames, 1)
+    if n_timescales == 0 or n <= block_size:
+        return None
+
+    rng = np.random.default_rng(_BOOTSTRAP_SEED)
+    n_blocks = int(np.ceil(n / block_size))
+    samples = np.full((n_bootstrap, n_timescales), np.nan)
+    for draw in range(n_bootstrap):
+        starts = rng.integers(0, n - block_size + 1, n_blocks)
+        resampled = np.concatenate(
+            [np.arange(start, start + block_size) for start in starts]
+        )[:n]
+        counts = np.zeros((n_states, n_states), dtype=float)
+        np.add.at(
+            counts,
+            (labels[resampled[:-lag_frames]], labels[resampled[lag_frames:]]),
+            1.0,
+        )
+        row_sums = counts.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1.0
+        eigenvalues = np.sort(np.real(np.linalg.eigvals(counts / row_sums)))[::-1]
+        for k, eigenvalue in enumerate(eigenvalues[1 : n_timescales + 1]):
+            if 0 < eigenvalue < 1:
+                samples[draw, k] = -lag_ps / np.log(eigenvalue)
+
+    if not np.all(np.any(np.isfinite(samples), axis=0)):
+        return None
+    percentiles = np.nanpercentile(samples, [5.0, 95.0], axis=0)
+    return [
+        [float(lo), float(hi)] for lo, hi in zip(percentiles[0], percentiles[1])
+    ]
+
+
 def _build_msm(
     labels: np.ndarray,
     lag_frames: int,
@@ -356,6 +408,10 @@ def _build_msm(
         if 0 < eigenvalue < 1:
             implied.append(float(-lag_ps / np.log(eigenvalue)))
 
+    timescale_cis = _bootstrap_timescale_cis(
+        labels, lag_frames, lag_ps, n_states, len(implied)
+    )
+
     ck_steps = 2 if len(labels) > 2 * lag_frames else 1
     direct_counts = np.zeros_like(counts, dtype=float)
     for idx in range(len(labels) - lag_frames * ck_steps):
@@ -388,6 +444,7 @@ def _build_msm(
         transition_matrix=transition_matrix.tolist(),
         stationary_distribution=stationary.tolist(),
         implied_timescales_ps=implied,
+        implied_timescales_ci_ps=timescale_cis,
         ck_steps=ck_steps,
         ck_deviation=ck_deviation,
         is_markovian=is_markovian,

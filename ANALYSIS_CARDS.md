@@ -40,7 +40,11 @@ side-by-side — no MSM report is produced without its classical baseline.
   output is a `KineticEmbedding` with explained variance and projections.
 - **MSM** — lagged transition counts → transition matrix, stationary
   distribution, implied timescales; Chapman-Kolmogorov deviation vs the
-  configured cutoff decides `is_markovian`.
+  configured cutoff decides `is_markovian`. Implied timescales carry 90%
+  confidence intervals from a seeded moving-block bootstrap (200 resamples,
+  block size 5× the lag to preserve temporal correlation, fixed seed so run
+  cards reproduce the intervals exactly); intervals are omitted rather than
+  guessed when the label sequence is too short to resample.
 - **PCA baseline** — same clustering on PCA components; exists solely as the
   comparison baseline, never reported alone.
 - **VAMPnet ablation** (Phase 6) — a small lobet-style network trained with
