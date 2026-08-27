@@ -84,14 +84,12 @@ footer a { color: var(--black); }
     <span class="badge badge-magenta">CI Green</span>
   </div>
   <div class="cta-row">
-    <a class="btn btn-primary" href="adk-report.html">Reference report (10 modules)</a>
-    <a class="btn btn-secondary" href="kinetics-report.html">Kinetics report (full ML layer)</a>
-    <a class="btn btn-secondary" href="demo-report.html">Demo trajectory report</a>
+    <a class="btn btn-primary" href="adk-report.html">Full reference report — adenylate kinase, all 10 modules</a>
   </div>
   <div class="card-grid">
     <div class="card">
       <h2>Deterministic</h2>
-      <p>RMSD, RMSF, Rg, SASA, H-bonds, contact maps, secondary structure, salt bridges. Exact math, never replaced by ML.</p>
+      <p>RMSD, RMSF, Rg, SASA, H-bonds, contact maps, secondary structure, salt bridges, dihedrals, COM drift. Exact math, never replaced by ML.</p>
     </div>
     <div class="card">
       <h2>Grounded</h2>
@@ -99,14 +97,14 @@ footer a { color: var(--black); }
     </div>
     <div class="card">
       <h2>Kinetically gated</h2>
-      <p>TICA + MSM run only behind minimum-data gates and CK validation; a VAMPnet ablation is reported against the baseline as specific numbers (synthetic kinetics demo: 6.4 vs 6.0 ps leading timescales).</p>
+      <p>TICA + MSM run only behind minimum-data gates and CK validation. On this reference clip the gate honestly refuses: 1 observed state-pair transition vs the required minimum of 10, so no kinetic numbers are reported.</p>
     </div>
     <div class="card">
       <h2>Verified</h2>
       <p>Numerical regression against published reference values runs in CI on every commit, with an 80% coverage gate.</p>
     </div>
   </div>
-  <footer>Source: github.com/honeyk254/MD_AI_Analyser &middot; Reports are static snapshots of real pipeline runs through the human review gate.</footer>
+  <footer>Source: github.com/honeyk254/MD_AI_Analyser &middot; Report is a static snapshot of a real pipeline run through the human review gate.</footer>
 </div>
 </body>
 </html>
