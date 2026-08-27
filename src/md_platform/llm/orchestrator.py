@@ -13,7 +13,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - optional dependency in local dev
     anthropic = None
 
-from ..aggregation.report_summary import build_report_summary
+from ..aggregation.report_summary import build_report_summary, reference_range_text
 from ..ml.schemas import MLAnalysisBundle
 from ..observability import LLM_METRICS, LLMCallMetric, span
 from ..schemas.analysis_bundle import AnalysisBundle
@@ -76,12 +76,8 @@ class LLMOrchestrator:
         if metric_name == "rg":
             metric_name = "radius_of_gyration"
 
-        ranges = {
-            "rmsd": "Typically < 3.0 A for stable globular proteins.",
-            "radius_of_gyration": "Should remain stable (std < 1.0 A).",
-            "sasa": "Should plateau during equilibrium.",
-        }
-        ref = ranges.get(metric_name, "No literature reference range available.")
+        # Single source of truth for the heuristics: the aggregation layer.
+        ref = reference_range_text(bundle, metric_name)
 
         # Fetch actual value to compare
         actual = self._get_metric_summary(bundle, metric_name)
@@ -247,9 +243,14 @@ class LLMOrchestrator:
             return draft_report
 
     def _render_fallback_report(self, summary: Dict[str, Any]) -> str:
-        """Render a deterministic report when no LLM key is configured."""
+        """Render a deterministic report when no LLM key is configured.
+
+        Covers every module in the bundle so different trajectories produce
+        visibly different reports; all numbers come from the aggregated summary.
+        """
         qc = summary["qc"]
         modules = summary["modules"]
+        reference_ranges = summary.get("reference_ranges") or {}
 
         lines = [
             "# Grounded MD Report",
@@ -263,25 +264,17 @@ class LLMOrchestrator:
                 f"- {flag['check_name']}: {'PASSED' if flag['passed'] else 'FAILED'} - {flag['details']}"
             )
 
-        lines.extend(
-            [
-                "",
-                "## Structural Stability",
-            ]
-        )
+        lines.extend(["", "## Module Results"])
+        for name, module in modules.items():
+            takeaway = module.get("takeaway") or "No scalar summary available."
+            ref = reference_ranges.get(name)
+            if ref and not ref.startswith("No "):
+                lines.append(f"- {name}: {takeaway} ({ref})")
+            else:
+                lines.append(f"- {name}: {takeaway}")
 
-        for key in ("rmsd", "radius_of_gyration", "sasa"):
-            module = modules.get(key)
-            if module:
-                lines.append(f"- {module['takeaway']}")
-
-        lines.extend(
-            [
-                "",
-                "## Biological Interpretation",
-                "- The report is intentionally conservative and only summarizes computed metrics.",
-            ]
-        )
+        interpretation = self._fallback_interpretation(summary)
+        lines.extend(["", "## Biological Interpretation", *interpretation])
 
         ml = summary.get("ml")
         if ml:
@@ -306,14 +299,64 @@ class LLMOrchestrator:
             if ml.get("vampnet_ablation"):
                 lines.append(f"- {ml['vampnet_ablation']['summary']}")
 
-        lines.extend(
-            [
-                "",
-                "## Limitations",
-                "- No free-form claims beyond the aggregated bundle.",
-                "",
-                "## Follow-ups",
-                "- Review module-specific plots before final sign-off.",
-            ]
-        )
+        lines.extend(self._fallback_limitations_and_followups(summary))
         return "\n".join(lines)
+
+    def _fallback_interpretation(self, summary: Dict[str, Any]) -> List[str]:
+        """Deterministic interpretation grounded in the computed reference ranges."""
+        interpretation: List[str] = []
+        reference_ranges = summary.get("reference_ranges") or {}
+        readable_names = {
+            "rmsd": "Backbone RMSD",
+            "radius_of_gyration": "Radius of gyration",
+            "sasa": "Total SASA",
+        }
+        for key, label in readable_names.items():
+            ref = reference_ranges.get(key)
+            if ref and not ref.startswith("No "):
+                interpretation.append(f"- {label}: {ref}")
+        ml = summary.get("ml")
+        if ml:
+            if ml["status"] == "completed" and ml.get("takeaway"):
+                interpretation.append(f"- Kinetic layer: {ml['takeaway']}")
+            elif not ml["gating"]["passed"] and ml.get("refusal_reason"):
+                interpretation.append(
+                    f"- Kinetic statistics were refused by the quality gate: {ml['refusal_reason']}"
+                )
+        if not interpretation:
+            return ["- No module-specific reference comparisons applied for this run."]
+        return interpretation
+
+    def _fallback_limitations_and_followups(self, summary: Dict[str, Any]) -> List[str]:
+        """Honest, run-specific limitations instead of static boilerplate."""
+        qc = summary["qc"]
+        modules = summary["modules"]
+        n_modules = len(modules)
+
+        limitations = [
+            "- Template-mode narrative (no LLM configured): every claim is copied from the aggregated analysis bundle.",
+            f"- Coverage reflects the {n_modules} classical modules that executed; failed modules would be absent from the results.",
+        ]
+        followups = []
+
+        if not qc["is_equilibrated"]:
+            followups.append(
+                "- Equilibration was not established within the analyzed window; "
+                "extend the trajectory before drawing equilibrium conclusions."
+            )
+        else:
+            followups.append("- Inspect the per-module plots before final sign-off.")
+
+        trend_followups = {
+            name: module["trend"] for name, module in modules.items() if module.get("trend")
+        }
+        if trend_followups:
+            bits = ", ".join(f"{name} ({trend})" for name, trend in sorted(trend_followups.items()))
+            followups.append(f"- Check module trends against expectations: {bits}.")
+
+        ml = summary.get("ml")
+        if ml and not ml["gating"]["passed"]:
+            followups.append(
+                "- The kinetic layer was gated off; only longer or more interconverting trajectories will support MSM statistics."
+            )
+        return ["", "## Limitations", *limitations, "", "## Follow-ups", *followups]

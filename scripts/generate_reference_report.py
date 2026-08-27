@@ -1,9 +1,15 @@
-"""Regenerate the live demo reports (GitHub Pages) end to end.
+"""Regenerate the live demo report (GitHub Pages) end to end.
 
-Runs the full pipeline on the adenylate-kinase reference trajectory with the
-ML layer enabled (TICA/MSM + VAMPnet ablation when torch is installed), then
-the bundled peptide demo with ML attempted (it demos the refusal gate).
-Writes standalone HTML reports to data/outputs/.
+Single-trajectory showcase policy: everything runs on ONE trajectory — the
+adenylate-kinase reference clip — through all classical modules, the plotting
+battery, the narrative generation, and human-review approval. The Phase 4 ML
+layer stays enabled so the gating decision is visible in the report itself: on
+this short 98-frame clip no parameterization reaches the documented minimum of
+10 transitions per state pair (measured sweep: lags 2-8 x k=2-3 peak at 2),
+so the kinetic section reports the honest gated refusal rather than numbers.
+
+Writes data/outputs/adk-reference/
+{analysis_report.html, draft_report.md, final_report.md, bundle.json}.
 """
 
 import asyncio
@@ -17,6 +23,8 @@ from md_platform.schemas.api import AnalysisRequest
 
 INPUTS = Path("data/inputs/adk")
 OUTPUTS = Path("data/outputs")
+
+RUN_ID = "adk-reference"
 
 
 def prepare_reference_inputs() -> None:
@@ -40,62 +48,27 @@ def adk_request(run_id: str) -> AnalysisRequest:
     )
 
 
-def kinetics_request(run_id: str) -> AnalysisRequest:
-    # Clearly-labeled synthetic two-state system: the one bundled input with
-    # genuine interconversion, so the full kinetic layer (gate -> TICA/MSM ->
-    # CK -> baseline -> VAMPnet ablation) runs end to end on the live page.
-    from md_platform.demo_inputs import ensure_demo_inputs
-
-    demo = ensure_demo_inputs(Path("data/inputs"))["kinetics"]
-    return AnalysisRequest(
-        job_id="demo-kinetics",
-        run_id=run_id,
-        topology_file=demo["topology_file"],
-        trajectory_file=demo["trajectory_file"],
-        enable_ml=True,
-        ml_lag_frames=3,
-        ml_n_states=2,
-        ml_min_frames=100,
-        ml_min_transition_count=10,
-        ml_ck_threshold=0.15,
-    )
-
-
-def peptide_request(run_id: str) -> AnalysisRequest:
-    # Default ML gates (100 frames) intentionally refuse the 12-frame demo
-    # peptide: the live demo shows the refusal path doing its job.
-    from md_platform.demo_inputs import ensure_demo_inputs
-
-    demo = ensure_demo_inputs(Path("data/inputs"))["stable"]
-    return AnalysisRequest(
-        job_id="demo-stable",
-        run_id=run_id,
-        topology_file=demo["topology_file"],
-        trajectory_file=demo["trajectory_file"],
-        enable_ml=True,
-    )
-
-
-async def run(request: AnalysisRequest) -> None:
+async def main() -> None:
     orchestrator = AnalysisOrchestrator(output_dir=OUTPUTS)
+    request = adk_request(RUN_ID)
+
     await orchestrator.run_analysis(request)
     status = orchestrator.get_status(request.run_id)
     print(f"[{request.run_id}] status={status.status} message={status.message}")
+
     ml = orchestrator.ml_bundles.get(request.run_id)
     if ml:
-        print(f"[{request.run_id}] ML: {ml.status}; vampnet={ml.vampnet_ablation.summary if ml.vampnet_ablation else None}")
-        if ml.refusal_reason:
-            print(f"[{request.run_id}] ML refusal: {ml.refusal_reason}")
+        print(f"[{request.run_id}] ML: {ml.status}; refusal={ml.refusal_reason}")
+
     if status.status.value == "human_review":
-        orchestrator.approve_run(
-            request.run_id,
-            "Regenerated end-to-end: 10 classical modules + TICA/MSM + VAMPnet ablation.",
+        signoff = (
+            "Regenerated single-trajectory reference: full classical battery; "
+            "kinetic layer exercised and gated off by the transition floor."
         )
-        print(f"[{request.run_id}] approved -> {(OUTPUTS / request.run_id / 'analysis_report.html')}")
+        orchestrator.approve_run(request.run_id, signoff)
+        print(f"[{request.run_id}] approved -> {(OUTPUTS / RUN_ID / 'analysis_report.html')}")
 
 
 if __name__ == "__main__":
     prepare_reference_inputs()
-    asyncio.run(run(adk_request("adk-reference")))
-    asyncio.run(run(kinetics_request("demo-kinetics")))
-    asyncio.run(run(peptide_request("demo-stable")))
+    asyncio.run(main())

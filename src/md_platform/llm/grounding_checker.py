@@ -20,14 +20,20 @@ class GroundingError(Exception):
 
 def extract_numbers(text: str) -> List[float]:
     """Extract all distinct numeric values from text."""
-    # Find numbers like 123, 12.34, -0.5
-    matches = re.findall(r'[-+]?\d*\.\d+|\d+', text)
+    # A +/- only counts as a sign when it does not directly follow a digit or
+    # dot — otherwise the range notation "CI 3.8-4.6 ps" would be misread as
+    # the negative number -4.6 and falsely flagged as ungrounded.
+    # Percentages ("bootstrap 90% CI") describe the method's own parameters,
+    # not trajectory measurements, so they carry no grounding obligation.
     numbers = []
-    for match in matches:
+    for match in re.finditer(r"(?<![\d.])[+-]?(?:\d+\.\d+|\.\d+|\d+)", text):
         try:
-            numbers.append(float(match))
+            number = float(match.group())
         except ValueError:
-            pass
+            continue
+        if text[match.end():].lstrip().startswith("%"):
+            continue
+        numbers.append(number)
     return numbers
 
 

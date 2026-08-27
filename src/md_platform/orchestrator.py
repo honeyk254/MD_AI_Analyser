@@ -28,6 +28,7 @@ from .domain.validation import validate_trajectory
 from .llm.orchestrator import LLMOrchestrator
 from .ml.analysis import run_phase4_ml_analysis
 from .ml.schemas import MLAnalysisBundle
+from .reporting.final_report import generate_final_markdown
 from .reporting.html_report import generate_html_report
 from .reporting.plots import generate_all_plots
 from .schemas.analysis_bundle import AnalysisBundle
@@ -47,6 +48,7 @@ class AnalysisOrchestrator:
         self.bundles: Dict[str, AnalysisBundle] = {}
         self.ml_bundles: Dict[str, MLAnalysisBundle] = {}
         self.drafts: Dict[str, str] = {}
+        self.plots: Dict[str, Dict[str, str]] = {}
         self.started_at: Dict[str, float] = {}
 
     def get_status(self, run_id: str) -> StatusResponse:
@@ -138,6 +140,7 @@ class AnalysisOrchestrator:
             run_out_dir = self.output_dir / run_id
             run_out_dir.mkdir(parents=True, exist_ok=True)
             plots = generate_all_plots(bundle, ml_bundle)
+            self.plots[run_id] = plots
 
             # 7. LLM Narrative Generation
             self.statuses[run_id].message = "Generating LLM narrative..."
@@ -196,20 +199,25 @@ class AnalysisOrchestrator:
             ml_bundle = self.ml_bundles.get(run_id)
             run_out_dir = self.output_dir / run_id
             run_out_dir.mkdir(parents=True, exist_ok=True)
-            plots = generate_all_plots(bundle, ml_bundle)
+            plots = self.plots.get(run_id) or generate_all_plots(bundle, ml_bundle)
+            narrative = self.drafts.get(run_id)
             generate_html_report(
                 bundle,
                 plots,
                 run_out_dir,
-                narrative_report=self.drafts.get(run_id),
+                narrative_report=narrative,
                 reviewer_signoff=reviewer_signoff,
                 ml_bundle=ml_bundle,
             )
             final_report = run_out_dir / "final_report.md"
-            report_text = self.drafts.get(run_id)
-            if report_text:
-                final_report.write_text(
-                    f"{report_text}\n\n## Human Review\n{reviewer_signoff}\n"
+            final_report.write_text(
+                generate_final_markdown(
+                    bundle=bundle,
+                    narrative=narrative,
+                    reviewer_signoff=reviewer_signoff,
+                    ml_bundle=ml_bundle,
+                    plot_names=sorted(plots.keys()),
                 )
+            )
 
         return status

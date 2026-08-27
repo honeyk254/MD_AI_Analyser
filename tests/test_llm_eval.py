@@ -69,6 +69,13 @@ def test_known_correct_ml_report_clears_checker(make_bundle, ml_bundle):
     assert _score_known(_check(_ml_known_correct_report(ml_bundle), make_bundle, ml_bundle, True)) == 1
 
 
+def test_ci_range_notation_clears_checker(make_bundle, ml_bundle) -> None:
+    """Regression: 'CI 3.8-4.6 ps' must not be read as the negative number -4.6."""
+    lo, hi = ml_bundle.msm.implied_timescales_ci_ps[0]
+    report = f"Leading implied timescale 6.0 ps (bootstrap 90% CI {lo:.1f}-{hi:.1f} ps)."
+    assert check_grounding(report, _make_classical_bundle(), ml_bundle) == []
+
+
 @pytest.mark.parametrize(("case_id", "template", "wrong", "uses_ml"), INJECTED_ERRORS)
 def test_injected_error_is_caught_and_named(case_id, template, wrong, uses_ml, make_bundle, ml_bundle):
     ungrounded = _check(template.format(n=wrong), make_bundle, ml_bundle, uses_ml)

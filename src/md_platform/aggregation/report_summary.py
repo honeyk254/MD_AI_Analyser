@@ -82,6 +82,13 @@ def _module_takeaway(name: str, result: ModuleResult) -> str:
     if name == "rmsd" and "backbone_rmsd" in result.scalar_metrics:
         metric = result.scalar_metrics["backbone_rmsd"]
         return f"Backbone RMSD averaged {metric.mean:.2f} {metric.unit}."
+    if name == "rmsf" and "mean_rmsf" in result.scalar_metrics:
+        metric = result.scalar_metrics["mean_rmsf"]
+        n_segments = len(result.data.get("flexible_segments") or [])
+        return (
+            f"Mean per-residue RMSF was {metric.mean:.2f} {metric.unit} "
+            f"across {n_segments} flexible segment(s)."
+        )
     if name == "radius_of_gyration" and "radius_of_gyration" in result.scalar_metrics:
         metric = result.scalar_metrics["radius_of_gyration"]
         return f"Radius of gyration averaged {metric.mean:.2f} {metric.unit}."
@@ -115,6 +122,11 @@ def _reference_ranges(bundle: AnalysisBundle) -> Dict[str, str]:
         "radius_of_gyration": _reference_range_text(bundle, "radius_of_gyration"),
         "sasa": _reference_range_text(bundle, "sasa"),
     }
+
+
+def reference_range_text(bundle: AnalysisBundle, metric_name: str) -> str:
+    """Single public source of literature-range heuristics for reports and tools."""
+    return _reference_range_text(bundle, metric_name)
 
 
 def _reference_range_text(bundle: AnalysisBundle, metric_name: str) -> str:
