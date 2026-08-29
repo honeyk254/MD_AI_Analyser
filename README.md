@@ -198,10 +198,8 @@ mypy src
 
 ## 📋 Roadmap
 
-Live demo reports: **https://honeyk254.github.io/MD_AI_Analyser/** — three pages generated end-to-end by the pipeline (through the grounding check and human review gate):
+Live demo report: **https://honeyk254.github.io/MD_AI_Analyser/** — a single-trajectory showcase generated end-to-end by the pipeline (through the grounding check and human review gate):
 * **[Reference system](https://honeyk254.github.io/MD_AI_Analyser/adk-report.html)** — adenylate kinase (Beckstein et al. 2009), all 10 classical modules; the ML layer refuses to run because DIMS is a directed, non-equilibrium trajectory with too few interconversions (the gate doing its job).
-* **[Synthetic kinetics](https://honeyk254.github.io/MD_AI_Analyser/kinetics-report.html)** — a clearly-labeled synthetic two-state system with real interconversion statistics: the full ML layer end to end (gating → TICA/MSM → CK validation → PCA baseline → VAMPnet ablation, e.g. VAMPnet vs TICA/MSM leading timescales 6.4 vs 6.0 ps).
-* **[Peptide demo](https://honeyk254.github.io/MD_AI_Analyser/demo-report.html)** — the bundled zero-setup demo input (9 modules; H-bonds require hydrogens/charges this synthetic PDB lacks, and the ML gate refuses its 12 frames).
 
 This project executes against the [Master Plan](md-ai-platform-master-plan.md):
 * ✅ **Phase 0:** Data contracts, provenance run-card, CI (lint + type-check + tests + coverage gate), reference trajectory with published ranges

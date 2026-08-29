@@ -1,18 +1,18 @@
-# Python bytecode
+# Python bytecode and build artifacts
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 
 # Virtual environments
 venv/
 .venv/
 env/
 
-# Uploads and results (user data)
+# Uploads and results (user data; outputs are regenerable)
 uploads/
 results/
 data/outputs/*/
-!data/outputs/f47b4f30-02fe-4174-8f82-6682f7ec3711/
 
 # IDE
 .vscode/
@@ -29,6 +29,7 @@ Thumbs.db
 # Local agent tooling
 .agents/
 skills-lock.json
+.zcode/
 .coverage
 data/inputs/examples/
 data/inputs/adk/
